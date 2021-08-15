@@ -27,7 +27,7 @@ portable_cl\
 
 One example of using this generated portable distribution without modifying your environment would be to change your `build.bat` like so:
 
-- Use `cl\cl` instead of `cl`.
+- Use `portable_cl\cl` instead of `cl`.
 - Add `/Icl\include` to your compiler options.
 - Add `/libpath:cl\lib` to your linker options.
 
