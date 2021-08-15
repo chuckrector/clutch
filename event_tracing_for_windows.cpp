@@ -11,8 +11,9 @@ TraceEventRecordCallback(EVENT_RECORD *Event)
     ETWEvent->Next = PushStruct(etw_event);
     ETWEventTrace->EventTail = ETWEvent->Next;
     ++ETWEventTrace->EventCount;
-   
-    if(IsEqualGUID(*Provider, FileIoGuid))
+
+    if((ETWEventTrace->Types & (1LL << ETWType_FileIO)) &&
+       IsEqualGUID(*Provider, FileIoGuid))
     {
         if(OpCode == 0x40) // PERFINFO_LOG_TYPE_FILE_IO_CREATE
         {
@@ -32,7 +33,8 @@ TraceEventRecordCallback(EVENT_RECORD *Event)
             MemCopy(ETWEvent->FileIO.Path, Path, PathLength + 1);
         }
     }
-    else if(IsEqualGUID(*Provider, ProcessGuid))
+    else if((ETWEventTrace->Types & (1LL << ETWType_Process)) &&
+            IsEqualGUID(*Provider, ProcessGuid))
     {
         if(OpCode == EVENT_TRACE_TYPE_START)
         {
@@ -185,4 +187,10 @@ ETWEndTrace(etw_event_trace *ETWEventTrace)
     WaitForSingleObject(Internal->TraceThread, INFINITE);
 
     // printf("Trace ended.\n");
+}
+
+static void
+ETWAddEventType(etw_event_trace *Trace, etw_type Type)
+{
+    Trace->Types |= (1LL << Type);
 }

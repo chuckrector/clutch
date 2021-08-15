@@ -157,7 +157,10 @@ main()
         MemCopy(Process->CommandLine, CmdArgs, StringLength(CmdArgs));
 
         // NOTE(chuck): Start the trace only after we've setup the main process ID for filtering.
-        ETWEventTrace = ETWBeginTrace();            
+        ETWEventTrace = ETWBeginTrace();
+        ETWAddEventType(ETWEventTrace, ETWType_FileIO);
+        ETWAddEventType(ETWEventTrace, ETWType_Process);
+
         ResumeThread(ProcessInfo.hThread);
         
         // NOTE(chuck): stdout must be closed before reading or we will hang.

@@ -104,6 +104,7 @@ struct etw_internal
 
 struct etw_event_trace
 {
+    u64 Types; // NOTE(chuck): ETWAddEventType sums a bitmask of etw_types
     etw_event *EventHead;
     etw_event *EventTail;
     int EventCount;
@@ -122,6 +123,7 @@ static void WINAPI TraceEventRecordCallback(EVENT_RECORD *Event);
 static DWORD WINAPI TraceProcessThread(void *ThreadParameter);
 static etw_event_trace *ETWBeginTrace();
 static void ETWEndTrace(etw_event_trace *ETWEventTrace);
+static void ETWAddEventType(etw_event_trace *Trace, etw_type Type);
 
 #define EVENT_TRACING_FOR_WINDOWS_H
 #endif
