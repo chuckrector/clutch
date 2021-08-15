@@ -64,7 +64,6 @@ TraceEventRecordCallback(EVENT_RECORD *Event)
 static DWORD WINAPI
 TraceProcessThread(void *ThreadParameter)
 {
-    // NOTE(chucK): CreateThread passes in an etw_internal instance as the thread parameter.
     TRACEHANDLE *TraceHandle = (TRACEHANDLE *)ThreadParameter;
     ProcessTrace(TraceHandle, 1, 0, 0);
     return(0);
