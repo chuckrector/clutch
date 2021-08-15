@@ -303,7 +303,6 @@ CopyFilesRecursively(wchar_t *FromFolder, wchar_t *ToFolder)
     return(Result);
 }
 
-// NOTE(chuck): FullRootDirectory must end with a backslash.
 static wchar_t *
 GetFullPath(wchar_t *Path)
 {
