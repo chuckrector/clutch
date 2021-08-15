@@ -447,7 +447,6 @@ FormatStringList(u32 DestSize, char *DestInit, char *Format, va_list Args)
 
                     if(*At == '*')
                     {
-                        // TODO(chuck): Seems like ++At should come before va_arg
                         Precision = va_arg(Args, int);
                         PrecisionSpecified = true;
                         ++At;
