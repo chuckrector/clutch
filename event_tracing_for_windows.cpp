@@ -7,16 +7,20 @@ TraceEventRecordCallback(EVENT_RECORD *Event)
 
     // NOTE(chuck): EVENT_TRACE_LOGFILEW.Context was set to an etw_event_trace
     etw_event_trace *ETWEventTrace = (etw_event_trace *)Event->UserContext;
-    etw_event *ETWEvent = ETWEventTrace->EventTail;
-    ETWEvent->Next = PushStruct(etw_event);
-    ETWEventTrace->EventTail = ETWEvent->Next;
-    ++ETWEventTrace->EventCount;
+
+    #define AddEvent \
+        etw_event *ETWEvent = ETWEventTrace->EventTail; \
+        ETWEvent->Next = PushStruct(etw_event); \
+        ETWEventTrace->EventTail = ETWEvent->Next; \
+        ++ETWEventTrace->EventCount;
 
     if((ETWEventTrace->Types & (1LL << ETWType_FileIO)) &&
        IsEqualGUID(*Provider, FileIoGuid))
     {
         if(OpCode == 0x40) // PERFINFO_LOG_TYPE_FILE_IO_CREATE
         {
+            AddEvent;
+
             FileIo_Create *Data = (FileIo_Create *)Event->UserData;
 
             char *PathA = PushSize(1024);
@@ -38,6 +42,8 @@ TraceEventRecordCallback(EVENT_RECORD *Event)
     {
         if(OpCode == EVENT_TRACE_TYPE_START)
         {
+            AddEvent;
+
             Process_TypeGroup1 *Data = (Process_TypeGroup1 *)Event->UserData;
             Assert(IsValidSid(&Data->UserSID));
             DWORD SIDLength = GetLengthSid(&Data->UserSID);
@@ -61,6 +67,8 @@ TraceEventRecordCallback(EVENT_RECORD *Event)
             CopyString(ETWEvent->Process.CommandLine, CommandLine);
         }
     }
+
+    #undef AddEvent
 }
 
 static DWORD WINAPI
