@@ -5,6 +5,7 @@ things in here, it's because I'm learning and trying out a lot of things. I'm in
 in getting more serious about becoming a better programmer and writing useful programs.
 This is the third program I've been working on in the past 6mo or so along those lines.
 */
+// TODO(chuck): Add timestamps, elapsed time, and total size in the log.
 
 #include "clutch.h"
 
