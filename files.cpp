@@ -350,3 +350,120 @@ FindFirstFileMatchInPathList(wchar_t *FileToFind, wchar_t *PathList)
 
     return(Result);
 }
+
+static wchar_t *
+Win32DevicePathToDrivePath(win32_volume_list *VolumeList, wchar_t *DevicePath)
+{
+    Assert(VolumeList);
+    Assert(DevicePath);
+    wchar_t *DevicePrefix = L"\\Device\\";
+    Assert(StringStartsWith(DevicePath, DevicePrefix));
+
+    // NOTE(chuck): In \Device\HarddiskVolume1\foo skip to foo
+    wchar_t *P = DevicePath + StringLength(DevicePrefix);
+    while(*P && *P != '\\') ++P;
+    ++P;
+    umm DeviceNameLength = (P - DevicePath);
+    wchar_t *VolumePath = P; // NOTE(chuck): Points to foo
+    umm DevicePathLength = StringLength(DevicePath);
+    umm VolumePathLength = DevicePathLength - DeviceNameLength;
+
+    wchar_t *Result = 0;
+    for(umm Index = 0;
+        Index < VolumeList->Count;
+        ++Index)
+    {
+        win32_volume *Volume = VolumeList->Volume + Index;
+        if(StringStartsWith(DevicePath, Volume->DeviceName))
+        {
+            Result = PushArray(Volume->DriveLength + VolumePathLength + 1, wchar_t);
+            CopyString(Result, Volume->Drive);
+            CopyString(Result + Volume->DriveLength, VolumePath);
+            break;
+        }
+    }
+
+    if(!Result)
+    {
+        Printf(STD_ERROR_HANDLE, "Failed to remap device path to drive path: %S\n");
+        Printf(STD_ERROR_HANDLE, "  Volumes searched:\n");
+        for(umm Index = 0;
+            Index < VolumeList->Count;
+            ++Index)
+        {
+            win32_volume *Volume = VolumeList->Volume + Index;
+            Printf(STD_ERROR_HANDLE, "    %S (%S)\n", Volume->DeviceName, Volume->Drive);
+        }
+        Quit("");
+    }
+
+    return(Result);
+}
+
+static win32_volume_list
+Win32GetVolumeList()
+{
+    win32_volume_list Result = {};
+
+    // NOTE(chuck): This is a full "volume GUID path".
+    wchar_t *VolumeName = PushArray(1024, wchar_t);
+
+    /*
+    NOTE(chuck): FindFirstVolume etc. will return "volume GUID paths" which look like this:
+        \\?\Volume{abcdefgh-0000-0000-0000-100000000000}\
+
+    Device names can be looked up via QueryDosDevice by passing this part:
+        Volume{abcdefgh-0000-0000-0000-100000000000}
+    Which will yield things of the form:
+        \Device\HarddiskVolume2
+
+    Passing full volume GUIDs to GetVolumePathNamesForVolumeName gives the drive mappings, e.g.:
+        C:\
+    
+    All of the paths in the events recorded by ETW use device names, e.g.:
+        \Device\HarddiskVolume2\WINDOWS\System32\cmd.exe
+
+    The volume list gathered here is useful for remapping device name paths to drive paths.
+    */
+    HANDLE VolumeHandle = FindFirstVolumeW(VolumeName, 1024);
+    if(VolumeHandle == INVALID_HANDLE_VALUE)
+    {
+        Quit("Failed to find the first volume.  Error code %d\n", GetLastError());
+    }
+
+    do
+    {
+        umm VolumeNameLength = StringLength(VolumeName);
+        win32_volume *Volume = Result.Volume + Result.Count;
+        
+        Volume->GUID = VolumeName;
+        Volume->DeviceName = PushArray(1024, wchar_t);
+        Volume->Drive = PushArray(1024, wchar_t);
+
+        VolumeName[--VolumeNameLength] = 0; // NOTE(chuck): Mangle for QueryDosDevice's benefit
+        DWORD DeviceNameBytesWritten = QueryDosDeviceW(VolumeName + 4, Volume->DeviceName, 1024);
+        if(!DeviceNameBytesWritten)
+        {
+            Quit("Failed to query the DOS device: %S\n  Error code %d\n", VolumeName + 4, GetLastError());
+        }
+        VolumeName[VolumeNameLength++] = '\\';
+
+        DWORD ReturnLength;
+        BOOL OK = GetVolumePathNamesForVolumeNameW(Volume->GUID, Volume->Drive, 1024, &ReturnLength);
+        if(!OK)
+        {
+            Quit("Failed to get volume path names for volume name: %S\n  Error code %d\n", VolumeName, GetLastError());
+        }
+        Volume->DriveLength = StringLength(Volume->Drive);
+
+        ++Result.Count;
+        if(Result.Count >= ArrayCount(Result.Volume))
+        {
+            Quit("Too many volumes.  Maximum allowed: %d\n", ArrayCount(Result.Volume));
+        }
+
+        VolumeName = PushArray(1024, wchar_t);
+    } while(FindNextVolumeW(VolumeHandle, VolumeName, 1024));
+
+    return(Result);
+}

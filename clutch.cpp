@@ -81,6 +81,27 @@ main()
         DeleteFilesRecursively(FullTargetDirectory);
     }
 
+    // TODO(chuck): For reasons I don't yet understand, getting the volume list fails if I attempt to
+    // do it after opening the log file.  Why??
+    win32_volume_list VolumeList = Win32GetVolumeList();
+    umm VolumeListingBufferSize = Kilobytes(4);
+    char *VolumeListingBuffer = PushArray(VolumeListingBufferSize, char);
+    {
+        char *P = VolumeListingBuffer;
+        umm BytesWritten = FormatString(VolumeListingBufferSize, P, "Volumes (%d)\n", VolumeList.Count);
+        VolumeListingBufferSize -= BytesWritten;
+        P += BytesWritten;
+        for(umm Index = 0;
+            Index < VolumeList.Count;
+            ++Index)
+        {
+            win32_volume *Volume = VolumeList.Volume + Index;
+            BytesWritten = FormatString(VolumeListingBufferSize, P, "    %S -> %S -> %S\n", Volume->GUID, Volume->DeviceName, Volume->Drive);
+            VolumeListingBufferSize -= BytesWritten;
+            P += BytesWritten;
+        }
+    }
+
     char *LogPathA = PushSize(1024);
     FormatString(1024, LogPathA, "%S\\clutch.log", FullTargetDirectory);
     InitLog(WidenChars(LogPathA));
@@ -126,7 +147,16 @@ main()
         StartupInfo.hStdOutput = WriteStdout;
         StartupInfo.dwFlags = STARTF_USESTDHANDLES;
         
-        wchar_t CmdExe[32] = L"C:\\Windows\\System32\\cmd.exe";
+        wchar_t *WindowsDirectory = PushArray(1024, wchar_t);
+        UINT WindowsDirectoryLength = GetWindowsDirectoryW(WindowsDirectory, 1024);
+        if(!WindowsDirectoryLength)
+        {
+            Quit("Failed to get the Windows directory.  Error code %d\n", GetLastError());
+        }
+
+        wchar_t *CmdExe = PushArray(1024, wchar_t);
+        CopyString(CmdExe, WindowsDirectory);
+        CopyString(CmdExe + WindowsDirectoryLength, L"\\System32\\cmd.exe");
         char *CmdArgsA = PushSize(1024);
         FormatString(1024, CmdArgsA, "/c %S", FullBuildScript);
         wchar_t *CmdArgs = WidenChars(CmdArgsA);
@@ -143,6 +173,8 @@ main()
         }
 
         Log("Build script %S %S\n", CmdExe, CmdArgs);
+        Log("Windows directory: %S\n", WindowsDirectory);
+        Log(VolumeListingBuffer);
 
         process *Process = ProcessFilterTail;
         ProcessFilterTail->Next = PushStruct(process);
@@ -265,8 +297,11 @@ main()
                 
                 if(Found)
                 {
-                    wchar_t *Path = Event->FileIO.Path;
-                    int PathLength = Event->FileIO.PathLength;
+                    wchar_t *DevicePath = Event->FileIO.Path;
+                    wchar_t *Path = Win32DevicePathToDrivePath(&VolumeList, DevicePath);
+                    // Log("Device path: %S\n  Drive path: %S\n", DevicePath, Path);
+
+                    int PathLength = StringLength(Path);
                     b32 IsTelemetry =
                         // TODO(chuck): Do any of these have legit uses for reasons other than Telemetry?
                         // I guess it's also true that if you're literally working on something relating to

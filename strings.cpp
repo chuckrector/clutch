@@ -386,7 +386,7 @@ F64ToASCII(format_dest *Dest, f64 Value, u32 Precision)
 }
 
 static umm
-FormatStringList(u32 DestSize, char *DestInit, char *Format, va_list Args)
+FormatStringList(umm DestSize, char *DestInit, char *Format, va_list Args)
 {
     format_dest Dest = {DestSize, DestInit};
     if(Dest.Size)
@@ -754,7 +754,7 @@ FormatStringList(u32 DestSize, char *DestInit, char *Format, va_list Args)
 }
 
 static umm
-FormatString(u32 DestSize, char *Dest, char *Format, ...)
+FormatString(umm DestSize, char *Dest, char *Format, ...)
 {
     va_list Args;
 

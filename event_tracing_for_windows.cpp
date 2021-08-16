@@ -23,12 +23,10 @@ TraceEventRecordCallback(EVENT_RECORD *Event)
 
             FileIo_Create *Data = (FileIo_Create *)Event->UserData;
 
-            char *PathA = PushSize(1024);
-            FormatString(1024, PathA, "C:\\%S", Data->OpenPath + 24);
-            int PathLength = StringLength(PathA);
-            wchar_t *Path = WidenChars(PathA);
+            wchar_t *Path = Data->OpenPath;
+            int PathLength = StringLength(Path);
 
-            // Log("ETW (PID %d) %S\n", Event->EventHeader.ProcessId, Path.Data);
+            // Log("ETW (PID %d) %S\n", Event->EventHeader.ProcessId, Path);
 
             ETWEvent->Type = ETWType_FileIO;
             ETWEvent->ProcessID = Event->EventHeader.ProcessId;

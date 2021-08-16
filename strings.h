@@ -46,8 +46,8 @@ static u64 ReadVarArgUnsignedInteger(u32 Length, va_list *Args);
 static f64 ReadVarArgFloat(u32 Length, va_list *Args);
 static void U64ToASCII(format_dest *Dest, u64 Value, u32 Base, char *Digits);
 static void F64ToASCII(format_dest *Dest, f64 Value, u32 Precision);
-static umm FormatStringList(u32 DestSize, char *DestInit, char *Format, va_list Args);
-static umm FormatString(u32 DestSize, char *Dest, char *Format, ...);
+static umm FormatStringList(umm DestSize, char *DestInit, char *Format, va_list Args);
+static umm FormatString(umm DestSize, char *Dest, char *Format, ...);
 static smm GetLastCharIndexInString(char *String, char Char);
 static smm GetLastCharIndexInString(wchar_t *String, wchar_t Char);
 
