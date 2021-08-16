@@ -1,8 +1,8 @@
 static umm
 PrintfList(DWORD Handle, char *Format, va_list Args)
 {
-    char Buffer[1024];
-    umm Result = FormatStringList(1024, Buffer, Format, Args);
+    char Buffer[2048];
+    umm Result = FormatStringList(2048, Buffer, Format, Args);
 
     HANDLE Out = GetStdHandle(Handle);
     DWORD CharsWritten;
