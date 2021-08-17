@@ -24,13 +24,4 @@ struct needed_file
 {
     wchar_t *Path;
     DWORD ProcessID;
-    needed_file *Next;
 };
-
-struct needed_file_list
-{
-    needed_file *FileHead;
-    needed_file *FileTail;
-    int Count;
-};
-

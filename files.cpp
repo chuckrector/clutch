@@ -5,20 +5,19 @@ NOTE(chuck): A general rule about files vs directories:
       even if a directory of the same name exists.
 */
 
-static int
+static void
 GetFiles(wchar_t *Path, file_listing *FileListing)
 {
-    int FilesFound = 0;
     Assert(Path[1] == ':'); // NOTE(chuck): Must be a full path
     // printf("GetDirectoryListing: %S\n", Path);
 
     int PathLength = StringLength(Path);
-    wchar_t *SearchPath = PushArray(PathLength + 2 + 1, wchar_t);
-    CopyString(SearchPath, Path);
-    CopyString(SearchPath + PathLength, L"\\*");
+    wchar_t *SearchingInHere = PushArray(PathLength + 2 + 1, wchar_t);
+    CopyString(SearchingInHere, Path);
+    CopyString(SearchingInHere + PathLength, L"\\*");
 
     WIN32_FIND_DATAW FindData;
-    HANDLE Handle = FindFirstFileW(SearchPath, &FindData);
+    HANDLE Handle = FindFirstFileW(SearchingInHere, &FindData);
     if(Handle != INVALID_HANDLE_VALUE)
     {
         for(;;)
@@ -28,7 +27,11 @@ GetFiles(wchar_t *Path, file_listing *FileListing)
                 StringsAreEqual(FindData.cFileName, L"..");
             if(!IsIgnore)
             {
-                file *File = FileListing->Tail;
+                if(FileListing->Count >= FileListing->MaxCount)
+                {
+                    Quit("Too many files.  Maximum allowed: %d\n", FileListing->MaxCount);
+                }
+                file *File = FileListing->List + FileListing->Count++;
                 int FilePathLength = StringLength(FindData.cFileName);
                 File->PathLength = FilePathLength;
                 File->Path = PushArray(PathLength + FilePathLength + 2, wchar_t); // NOTE(chuck): \ and \0
@@ -38,14 +41,9 @@ GetFiles(wchar_t *Path, file_listing *FileListing)
                 File->Size = FindData.nFileSizeLow | ((u64)FindData.nFileSizeHigh << 32);
                 File->IsDirectory = FindData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY;
 
-                File->Next = PushStruct(file);
-                File->Next->Prev = File;
-                FileListing->Tail = File->Next;
-                ++FileListing->Count;
-
                 if(File->IsDirectory)
                 {
-                    FilesFound += GetFiles(File->Path, FileListing);
+                    GetFiles(File->Path, FileListing);
                 }
             }
             
@@ -61,8 +59,6 @@ GetFiles(wchar_t *Path, file_listing *FileListing)
             }
         }
     }
-
-    return(FilesFound);
 }
 
 // NOTE(chuck): To avoid PathFileExistsW and dependency on shlwapi.lib
@@ -112,17 +108,27 @@ CreateDirectory(wchar_t *Path)
 static void
 DeleteFilesRecursively(wchar_t *Directory)
 {
-    file_listing FileListing = {};
-    FileListing.Head = 
-    FileListing.Tail = PushStruct(file);
-    GetFiles(Directory, &FileListing);
-    Log("Removing %d existing files...\n", FileListing.Count);
+    Assert(Directory);
 
-    file *File = FileListing.Head;
+    /* TODO(chuck): If the target directory exists but is completely empty, attempting to
+       call Win32GetVolumeList will fail with a memory violation:
+    
+           Failed to query the DOS device: Volume{5faf6dd2-0000-0000-0000-100000000000}
+             Error code 998
+
+       Figure out where I'm mismanaging memory.  Until then, freeing all the memory used
+       here seems to fix the problem. */
+    umm Used = GlobalMemoryUsed;
+
+    file_listing FileListing = {1024, 0, PushArray(1024, file)};
+    GetFiles(Directory, &FileListing);
+    Log("Removing %d existing files in %S\n", FileListing.Count, Directory);
+    // Printf("Removing %d existing files in %S\n", FileListing.Count, Directory);
     for(int Index = 0;
         Index < FileListing.Count;
         ++Index)
     {
+        file* File = FileListing.List + Index;
         if(!File->IsDirectory)
         {
             if(!DeleteFileW(File->Path))
@@ -130,16 +136,15 @@ DeleteFilesRecursively(wchar_t *Directory)
                 Quit("Failed to delete file: %S\n", File->Path);
             }
         }
-        File = File->Next;
     }
 
     // NOTE(chuck): Remove all directories in the target. Nested directories always
     // come last, so delete them in reverse order.
-    File = FileListing.Tail->Prev;
-    for(int Index = 0;
-        Index < FileListing.Count;
-        ++Index)
+    for(int Index = FileListing.Count - 1;
+        Index >= 0;
+        --Index)
     {
+        file *File = FileListing.List + Index;
         if(File->IsDirectory)
         {
             if(!RemoveDirectoryW(File->Path))
@@ -147,8 +152,9 @@ DeleteFilesRecursively(wchar_t *Directory)
                 Quit("Failed to remove directory: %S\n", File->Path);
             }
         }
-        File = File->Prev;
     }
+
+    GlobalMemoryUsed = Used;
 }
 
 // NOTE(chuck): RootDirectory is expected to be an absolute path.
@@ -403,7 +409,7 @@ Win32DevicePathToDrivePath(win32_volume_list *VolumeList, wchar_t *DevicePath)
 static win32_volume_list
 Win32GetVolumeList()
 {
-    win32_volume_list Result = {};
+    win32_volume_list Result = {16, 0, PushArray(16, win32_volume)};
 
     // NOTE(chuck): This is a full "volume GUID path".
     wchar_t *VolumeName = PushArray(1024, wchar_t);
@@ -434,19 +440,25 @@ Win32GetVolumeList()
     do
     {
         umm VolumeNameLength = StringLength(VolumeName);
-        win32_volume *Volume = Result.Volume + Result.Count;
+        if(Result.Count >= Result.MaxCount)
+        {
+            Quit("Too many volumes.  Maximum allowed: %d\n", Result.MaxCount);
+        }
+        win32_volume *Volume = Result.Volume + Result.Count++;
         
         Volume->GUID = VolumeName;
-        Volume->DeviceName = PushArray(1024, wchar_t);
+        Volume->DeviceName = PushArray(32, wchar_t);
         Volume->Drive = PushArray(1024, wchar_t);
 
-        VolumeName[--VolumeNameLength] = 0; // NOTE(chuck): Mangle for QueryDosDevice's benefit
-        DWORD DeviceNameBytesWritten = QueryDosDeviceW(VolumeName + 4, Volume->DeviceName, 1024);
+        wchar_t *QueryName = PushArray(1024, wchar_t);
+        umm QueryNameLength = VolumeNameLength - 4 - 1;
+        MemCopy(QueryName, VolumeName + 4, QueryNameLength);
+        QueryName[QueryNameLength] = 0;
+        DWORD DeviceNameBytesWritten = QueryDosDeviceW(QueryName, Volume->DeviceName, 32);
         if(!DeviceNameBytesWritten)
         {
-            Quit("Failed to query the DOS device: %S\n  Error code %d\n", VolumeName + 4, GetLastError());
+            Quit("Failed to query the DOS device: %S\n  Error code %d\n", QueryName, GetLastError());
         }
-        VolumeName[VolumeNameLength++] = '\\';
 
         DWORD ReturnLength;
         BOOL OK = GetVolumePathNamesForVolumeNameW(Volume->GUID, Volume->Drive, 1024, &ReturnLength);
@@ -455,12 +467,6 @@ Win32GetVolumeList()
             Quit("Failed to get volume path names for volume name: %S\n  Error code %d\n", VolumeName, GetLastError());
         }
         Volume->DriveLength = StringLength(Volume->Drive);
-
-        ++Result.Count;
-        if(Result.Count >= ArrayCount(Result.Volume))
-        {
-            Quit("Too many volumes.  Maximum allowed: %d\n", ArrayCount(Result.Volume));
-        }
 
         VolumeName = PushArray(1024, wchar_t);
     } while(FindNextVolumeW(VolumeHandle, VolumeName, 1024));

@@ -1,27 +1,32 @@
+static etw_event *
+ETWEventAdd(etw_event_trace *Trace)
+{
+    if(Trace->EventCount >= ETW_EVENT_MAX)
+    {
+        Quit("Too many events occurred.  Maximum allowed: %d\n", ETW_EVENT_MAX);
+    }
+    etw_event *Result = Trace->EventList + Trace->EventCount++;
+    return(Result);
+}
+
 // NOTE(chuck): Massage M$ crapola into stuff I care about.
 static void WINAPI
-TraceEventRecordCallback(EVENT_RECORD *Event)
+TraceEventRecordCallback(EVENT_RECORD *EventRecord)
 {
-    GUID *Provider = &Event->EventHeader.ProviderId;
-    UCHAR OpCode = Event->EventHeader.EventDescriptor.Opcode;
+    GUID *Provider = &EventRecord->EventHeader.ProviderId;
+    UCHAR OpCode = EventRecord->EventHeader.EventDescriptor.Opcode;
 
     // NOTE(chuck): EVENT_TRACE_LOGFILEW.Context was set to an etw_event_trace
-    etw_event_trace *ETWEventTrace = (etw_event_trace *)Event->UserContext;
+    etw_event_trace *Trace = (etw_event_trace *)EventRecord->UserContext;
 
-    #define AddEvent \
-        etw_event *ETWEvent = ETWEventTrace->EventTail; \
-        ETWEvent->Next = PushStruct(etw_event); \
-        ETWEventTrace->EventTail = ETWEvent->Next; \
-        ++ETWEventTrace->EventCount;
-
-    if((ETWEventTrace->Types & (1LL << ETWType_FileIO)) &&
+    if((Trace->Types & (1LL << ETWType_FileIO)) &&
        IsEqualGUID(*Provider, FileIoGuid))
     {
         if(OpCode == 0x40) // PERFINFO_LOG_TYPE_FILE_IO_CREATE
         {
-            AddEvent;
+            etw_event *ETWEvent = ETWEventAdd(Trace);
 
-            FileIo_Create *Data = (FileIo_Create *)Event->UserData;
+            FileIo_Create *Data = (FileIo_Create *)EventRecord->UserData;
 
             wchar_t *Path = Data->OpenPath;
             int PathLength = StringLength(Path);
@@ -29,20 +34,20 @@ TraceEventRecordCallback(EVENT_RECORD *Event)
             // Log("ETW (PID %d) %S\n", Event->EventHeader.ProcessId, Path);
 
             ETWEvent->Type = ETWType_FileIO;
-            ETWEvent->ProcessID = Event->EventHeader.ProcessId;
+            ETWEvent->ProcessID = EventRecord->EventHeader.ProcessId;
             ETWEvent->FileIO.Path = PushArray(PathLength + 1, wchar_t);
             ETWEvent->FileIO.PathLength = PathLength;
             MemCopy(ETWEvent->FileIO.Path, Path, PathLength + 1);
         }
     }
-    else if((ETWEventTrace->Types & (1LL << ETWType_Process)) &&
+    else if((Trace->Types & (1LL << ETWType_Process)) &&
             IsEqualGUID(*Provider, ProcessGuid))
     {
         if(OpCode == EVENT_TRACE_TYPE_START)
         {
-            AddEvent;
+            etw_event *ETWEvent = ETWEventAdd(Trace);
 
-            Process_TypeGroup1 *Data = (Process_TypeGroup1 *)Event->UserData;
+            Process_TypeGroup1 *Data = (Process_TypeGroup1 *)EventRecord->UserData;
             Assert(IsValidSid(&Data->UserSID));
             DWORD SIDLength = GetLengthSid(&Data->UserSID);
 
@@ -83,8 +88,7 @@ ETWBeginTrace()
     etw_event_trace *Result = PushStruct(etw_event_trace);
     etw_internal *Internal = PushStruct(etw_internal);
     Internal->Wnode = PushStruct(etw_internal_wnode);
-    Result->EventHead = PushStruct(etw_event);
-    Result->EventTail = Result->EventHead;
+    Result->EventList = PushArray(ETW_EVENT_MAX, etw_event);
     Result->Internal = Internal;
     Result->Error = 666;
 
@@ -185,9 +189,9 @@ ETWBeginTrace()
 }
 
 static void
-ETWEndTrace(etw_event_trace *ETWEventTrace)
+ETWEndTrace(etw_event_trace *Trace)
 {
-    etw_internal *Internal = (etw_internal *)ETWEventTrace->Internal;
+    etw_internal *Internal = (etw_internal *)Trace->Internal;
     ULONG StopTraceResult = ControlTraceW(0, KERNEL_LOGGER_NAMEW, &Internal->Wnode->Properties, EVENT_TRACE_CONTROL_STOP);
     CloseTrace(Internal->TraceHandle);
     WaitForSingleObject(Internal->TraceThread, INFINITE);

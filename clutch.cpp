@@ -120,9 +120,9 @@ main()
     TotalDirectoriesCreated += CreateDirectory(TargetIncludeDirectory);
     TotalDirectoriesCreated += CreateDirectory(TargetLibDirectory);
 
-    process *ProcessFilterHead = PushStruct(process);
-    process *ProcessFilterTail = ProcessFilterHead;
-    int ProcessFilterCount = 0;
+    #define PROCESS_FILTER_MAX (128)
+    process *ProcessFilter = PushArray(PROCESS_FILTER_MAX, process);
+    umm ProcessFilterCount = 0;
 
     // NOTE(chuck): Run build script and capture its stderr/stdout.  This is done for
     // debuggability if the build script fails.
@@ -177,17 +177,13 @@ main()
         Log("Windows directory: %S\n", WindowsDirectory);
         Log(VolumeListingBuffer);
 
-        process *Process = ProcessFilterTail;
-        ProcessFilterTail->Next = PushStruct(process);
-        ProcessFilterTail = ProcessFilterTail->Next;
-        ++ProcessFilterCount;
-
+        process *Process = ProcessFilter + ProcessFilterCount++;
         Process->ImageFilename = PushArray(8, wchar_t);
         Process->CommandLine = PushArray(StringLength(CmdArgs) + 1, wchar_t);
         Process->ProcessID = ProcessInfo.dwProcessId;
         // Printf("  Root process PID %d\n", Process->ProcessID);
-        MemCopy(Process->ImageFilename, L"cmd.exe", 8);
-        MemCopy(Process->CommandLine, CmdArgs, StringLength(CmdArgs));
+        CopyString(Process->ImageFilename, L"cmd.exe");
+        CopyString(Process->CommandLine, CmdArgs);
 
         // NOTE(chuck): Start the trace only after we've setup the main process ID for filtering.
         ETWEventTrace = ETWBeginTrace();
@@ -261,10 +257,9 @@ main()
         }
     }
 
-    needed_file_list NeededFiles = {};
-    NeededFiles.FileHead =
-    NeededFiles.FileTail = PushStruct(needed_file);
-    NeededFiles.Count = 0;
+    #define NEEDED_FILE_MAX (1024 * 10)
+    needed_file *NeededFileList = PushArray(NEEDED_FILE_MAX, needed_file);
+    umm NeededFileCount = 0;
 
     // NOTE(chuck): Filter some items of interest
     // TODO(chuck): Merge this filtering block with the copy block below.  This filtering block used
@@ -273,27 +268,27 @@ main()
     // no reason for two passes anymore.
 
     // Printf("# events: %d\n", ETWEventTrace->EventCount);
-    etw_event *Event = ETWEventTrace->EventHead;
-    while(Event)
+    for(umm EventIndex = 0;
+        EventIndex < ETWEventTrace->EventCount;
+        ++EventIndex)
     {
+        etw_event *Event = ETWEventTrace->EventList + EventIndex;
         switch(Event->Type)
         {
             case ETWType_FileIO:
             {
                 // NOTE(chuck): Martins reminded me that cl.exe can launch many cl.exe child processes itself
                 // with /MP.  Need to track all spawned processes so that they can all be filtered against.
-                process *P = ProcessFilterHead;
                 b32 Found = false;
                 for(int Index = 0;
                     Index < ProcessFilterCount;
                     ++Index)
                 {
-                    if(Event->ProcessID == P->ProcessID)
+                    if(Event->ProcessID == ProcessFilter[Index].ProcessID)
                     {
                         Found = true;
                         break;
                     }
-                    P = P->Next;
                 }
                 
                 if(Found)
@@ -329,42 +324,44 @@ main()
                     b32 IsWanted = (IsWhitelistedDirectory && IsWhitelistedExtension);
                     if(!IsIgnore && IsWanted && FileExists(Path))
                     {
-                        needed_file *NeededFile = NeededFiles.FileHead;
                         b32 IsFound = false;
-                        int Count = NeededFiles.Count;
-                        while(Count--)
+                        for(umm NeededFileIndex = 0;
+                            NeededFileIndex < NeededFileCount;
+                            ++NeededFileIndex)
                         {
-                            if(StringsAreEqualWithinLength(NeededFile->Path, Path, PathLength + 1))
+                            if(StringsAreEqualWithinLength(NeededFileList[NeededFileIndex].Path, Path, PathLength + 1))
                             {
                                 IsFound = true;
                                 break;
                             }
-                            NeededFile = NeededFile->Next;
                         }
 
                         // NOTE(chuck): Only add uniques                                            
                         if(!IsFound)
                         {
+                            if(NeededFileCount >= NEEDED_FILE_MAX)
+                            {
+                                Quit("Too many needed files.  Maximum allowed: %d\n", NEEDED_FILE_MAX);
+                            }
+
                             wchar_t *NewPathFilename = GetFilename(Path);
                             int NewPathFilenameLength = StringLength(NewPathFilename);
-                            NeededFile = NeededFiles.FileHead;
-                            Count = NeededFiles.Count;
-                            while(Count--)
+                            for(umm NeededFileIndex = 0;
+                                NeededFileIndex < NeededFileCount;
+                                ++NeededFileIndex)
                             {
+                                needed_file *NeededFile = NeededFileList + NeededFileIndex;
                                 wchar_t *ExistingPathFilename = GetFilename(NeededFile->Path);
                                 if(StringsAreEqualWithinLength(ExistingPathFilename, NewPathFilename, NewPathFilenameLength))
                                 {
                                     Quit("Dependencies are not unique:\n  %S\n  %S\n", NeededFile->Path, Path);
                                 }
-                                NeededFile = NeededFile->Next;
                             }
 
+                            needed_file *NeededFile = NeededFileList + NeededFileCount++;
                             NeededFile->Path = PushArray(PathLength + 1, wchar_t);
                             NeededFile->ProcessID = Event->ProcessID;
                             MemCopy(NeededFile->Path, Path, PathLength + 1);
-                            NeededFile->Next =
-                            NeededFiles.FileTail = PushStruct(needed_file);
-                            ++NeededFiles.Count;
                         }
                     }
                 }
@@ -373,30 +370,29 @@ main()
             case ETWType_Process:
             {
                 // Printf("[process] %s %S\n", Event->Process.ImageFilename, Event->Process.CommandLine);
-                process *P = ProcessFilterHead;
                 b32 FoundChildProcess = false;
                 for(int Index = 0;
                     Index < ProcessFilterCount;
                     ++Index)
                 {
-                    if(Event->Process.ParentProcessID == P->ProcessID)
+                    if(Event->Process.ParentProcessID == ProcessFilter[Index].ProcessID)
                     {
                         FoundChildProcess = true;
                         break;
                     }
-                    P = P->Next;
-                }
+               }
                 
                 if(FoundChildProcess)
                 {
-                    process *Process = ProcessFilterTail;
-                    Process->Next = PushStruct(process);
-                    ProcessFilterTail = Process->Next;
+                    if(ProcessFilterCount >= PROCESS_FILTER_MAX)
+                    {
+                        Quit("Too many processes.  Maximum allowed: %d\n", PROCESS_FILTER_MAX);
+                    }
+                    process *Process = ProcessFilter + ProcessFilterCount++;
                     Process->ImageFilename = Event->Process.ImageFilename;
                     Process->CommandLine = Event->Process.CommandLine;
                     Process->ProcessID = Event->ProcessID;
                     Process->ParentProcessID = Event->Process.ParentProcessID;
-                    ++ProcessFilterCount;
                     // Log("Found another process: %d (Parent %d) %s %S\n",
                     //     Event->ProcessID, Event->Process.ParentProcessID,
                     //     Process->ImageFilename,
@@ -405,19 +401,18 @@ main()
                 }
             } break;
         }
-        
-        Event = Event->Next;
     }
 
     // NOTE(chuck): Transform the filtered stuff into usable paths. Rack up some tallies
     // TODO(chuck): Merge with the filtering block above.
-    needed_file *NeededFile = NeededFiles.FileHead;
     b32 IsFound = false;
-    int Count = NeededFiles.Count;
     char *TargetPathBuffer = PushSize(1024);
     wchar_t *CompilerDirectory = 0;
-    while(Count--)
+    for(umm NeededFileIndex = 0;
+        NeededFileIndex < NeededFileCount;
+        ++NeededFileIndex)
     {
+        needed_file *NeededFile = NeededFileList + NeededFileIndex;
         Log("%S\n", NeededFile->Path);
         char *TargetPath = TargetPathBuffer;
         wchar_t *TargetFilename = GetFilename(NeededFile->Path);
@@ -479,8 +474,6 @@ main()
         else if(StringEndsWith(NeededFile->Path, L".lib")) ++TotalLibFilesCopied;
         else if(StringEndsWith(NeededFile->Path, L".pdb")) ++TotalPDBFilesCopied;
         ++TotalFilesCopied;
-        
-        NeededFile = NeededFile->Next;
     }
     
     Log("\n");

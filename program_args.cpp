@@ -1,28 +1,41 @@
+#define PROGRAM_ARG_MAX (1024 * 4)
 struct arg
 {
     wchar_t *Value;
     umm Length;
-    arg *Next;
 };
 
 struct program_args
 {
     u32 Count;
-    arg *Arg;
+    arg *ArgList;
 };
+
+static arg *
+AddProgramArg(program_args *ProgramArgs)
+{
+    if(ProgramArgs->Count >= PROGRAM_ARG_MAX)
+    {
+        Quit("Too many program args.  Maximum allowed: %d\n", PROGRAM_ARG_MAX);
+    }
+
+    arg *Result = ProgramArgs->ArgList + ProgramArgs->Count++;
+    // NOTE(chuck): Just write directly into global memory and push the used amount
+    // forward as necessary.
+    Result->Value = MemCurrent(wchar_t);
+
+    return(Result);
+}
 
 // NOTE(chuck): I'm mimicking CommandLineToArgvW as an exercise.  That is the
 // reason for all the wonky parsing logic below.
-program_args
+static program_args
 GetProgramArgs(wchar_t *CommandLine)
 {
     #define IsWhite(C) ((*(C) == ' ') || (*(C) == '\t'))
 
-    program_args Result = {0, PushStruct(arg)};
-    arg *Arg = Result.Arg;
-    // NOTE(chuck): Just write directly into global memory and push the used amount
-    // forward as necessary.
-    Arg->Value = MemCurrent(wchar_t);
+    program_args Result = {0, PushArray(PROGRAM_ARG_MAX, arg)};
+    arg *Arg = AddProgramArg(&Result);
 
     wchar_t *From = CommandLine;
     wchar_t *To = Arg->Value;
@@ -43,18 +56,14 @@ GetProgramArgs(wchar_t *CommandLine)
     #define CommitArg \
         *To++ = 0; \
         Arg->Length = To - Arg->Value; \
-        MemSkip(Arg->Length, wchar_t); \
-        ++Result.Count
+        MemSkip(Arg->Length, wchar_t);
     CommitArg;
 
     while(IsWhite(From)) ++From;
     if(*From)
     {
-        #define NewArg \
-            Arg->Next = PushStruct(arg); \
-            Arg->Next->Value = To = MemCurrent(wchar_t); \
-            Arg = Arg->Next
-        NewArg;
+        Arg = AddProgramArg(&Result);
+        To = Arg->Value;
 
         int Quotes = 0;
         int Slashes = 0;
@@ -67,7 +76,7 @@ GetProgramArgs(wchar_t *CommandLine)
                 if(*From)
                 {
                     CommitArg;
-                    NewArg;
+                    Arg = AddProgramArg(&Result);
                 }
             }
             else if(*From == '\\')
@@ -112,10 +121,9 @@ GetProgramArgs(wchar_t *CommandLine)
 
     #undef IsWhite
     #undef CommitArg
-    #undef NewArg
 }
  
-program_args
+static program_args
 GetProgramArgs()
 {
     wchar_t *CommandLine = GetCommandLineW();
@@ -123,15 +131,16 @@ GetProgramArgs()
     return(Result);
 }
 
-wchar_t *
+static wchar_t *
 GetArg(program_args *ProgramArgs, u32 Index)
 {
-    arg *Arg = ProgramArgs->Arg;
-    u32 N = 0;
-    while(Arg && N < Index && N < ProgramArgs->Count)
+    Assert(ProgramArgs);
+    if((Index < 0) || (Index >= ProgramArgs->Count))
     {
-        ++N;
-        Arg = Arg->Next;
+        Quit("Program arg index out of range: %d\n  Total program args available: %d\n", Index, ProgramArgs->Count);
     }
-    return(Arg->Value);
+
+    arg *Arg = ProgramArgs->ArgList + Index;
+    wchar_t *Result = Arg->Value;
+    return(Result);
 }

@@ -6,16 +6,13 @@ struct file
     int PathLength;
     int Size;
     b32 IsDirectory;
-
-    file *Next;
-    file *Prev;
 };
 
 struct file_listing
 {
+    int MaxCount;
     int Count;
-    file *Head;
-    file *Tail;
+    file *List;
 };
 
 // TODO(chuck): Use file instead?
@@ -54,20 +51,18 @@ struct win32_volume
 
 struct win32_volume_list
 {
-    win32_volume Volume[10];
+    umm MaxCount;
     umm Count;
+    win32_volume *Volume;
 };
 
-static int GetFiles(wchar_t *Path, file_listing *FileListing);
+static void GetFiles(wchar_t *Path, file_listing *FileListing);
 static b32 FileExists(wchar_t *Path);
 static wchar_t *GetFilename(wchar_t *Path);
 static int CreateDirectory(wchar_t *Path);
 static void DeleteFilesRecursively(wchar_t *Directory);
 static int CreateDirectoriesRecursively(wchar_t *RootDirectory, wchar_t *RelativePath);
 static recursive_copy CopyFilesRecursively(wchar_t *FromFolder, wchar_t *ToFolder);
-static path FullPath(wchar_t *Path, umm PathLength,
-                     wchar_t *FullRootDirectory, umm FullRootDirectoryLength,
-                     wchar_t *ScratchBuffer, umm ScratchBufferLength);
 static find_first_file FindFirstFileMatchInPathList(wchar_t *FileToFind, wchar_t *PathList);
 static win32_volume_list Win32GetVolumeList();
 static win32_volume *Win32GetVolumeForPath(wchar_t *Path);

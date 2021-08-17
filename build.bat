@@ -24,5 +24,5 @@ if not exist "build" mkdir build
 pushd build
 
 REM NOTE(chuck): start /b allows parallel compilation
-cl %CompilerFlags% ..\%CurrentFolderName%.cpp /link %LinkerFlags% advapi32.lib
-@REM start /b cl %CompilerFlags% ..\tests.cpp /link %LinkerFlags%
+start /b cl %CompilerFlags% ..\%CurrentFolderName%.cpp /link %LinkerFlags% advapi32.lib
+start /b cl %CompilerFlags% ..\tests.cpp /link %LinkerFlags%

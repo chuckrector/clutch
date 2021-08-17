@@ -30,12 +30,14 @@ static void
 CopyString(char *To, char *From)
 {
     while(*From) *To++ = *From++;
+    *To++ = 0;
 }
 
 static void
 CopyString(wchar_t *To, wchar_t *From)
 {
     while(*From) *To++ = *From++;
+    *To++ = 0;
 }
 
 static b32

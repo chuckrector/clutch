@@ -5,12 +5,6 @@ Many thanks to Mārtiņš Možeiko for sharing many code snippets and links to h
 */
 #if !defined(EVENT_TRACING_FOR_WINDOWS_H)
 
-struct path_link
-{
-    wchar_t *Path;
-    path_link *Next;
-};
-
 struct Process_TypeGroup1
 {
     uint64_t UniqueProcessKey;
@@ -47,8 +41,6 @@ struct process
     DWORD ParentProcessID;
     wchar_t *ImageFilename;
     wchar_t *CommandLine;
-
-    process *Next;
 };
 
 enum etw_type
@@ -85,8 +77,6 @@ struct etw_event
         etw_event_file_io FileIO;
         etw_event_process Process;
     };
-
-    etw_event *Next;
 };
 
 struct etw_internal_wnode
@@ -102,11 +92,11 @@ struct etw_internal
     HANDLE TraceThread;
 };
 
+#define ETW_EVENT_MAX (1024 * 10)
 struct etw_event_trace
 {
     u64 Types; // NOTE(chuck): ETWAddEventType sums a bitmask of etw_types
-    etw_event *EventHead;
-    etw_event *EventTail;
+    etw_event *EventList;
     int EventCount;
 
     int Error;
