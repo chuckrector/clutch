@@ -6,6 +6,7 @@ in getting more serious about becoming a better programmer and writing useful pr
 This is the third program I've been working on in the past 6mo or so along those lines.
 */
 // TODO(chuck): Add timestamps, elapsed time, and total size in the log.
+// TODO(chuck): Proper English error messages.  Convert GetLastError() codes to English.
 
 #include "clutch.h"
 
