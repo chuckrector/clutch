@@ -122,160 +122,160 @@ main()
 
     // NOTE(chuck): Run build script and capture its stderr/stdout.  This is done for
     // debuggability if the build script fails.
-        HANDLE ReadStdout;
-        HANDLE WriteStdout;
-        SECURITY_ATTRIBUTES SecurityAttributes = {};
-        SecurityAttributes.nLength = sizeof(SecurityAttributes); 
-        // NOTE(chuck): The child process won't be able to make use of these pipes unless
-        // they have inheritance enabled.
-        SecurityAttributes.bInheritHandle = 1;
-        
-        if(!CreatePipe(&ReadStdout, &WriteStdout, &SecurityAttributes, 0))
+    HANDLE ReadStdout;
+    HANDLE WriteStdout;
+    SECURITY_ATTRIBUTES SecurityAttributes = {};
+    SecurityAttributes.nLength = sizeof(SecurityAttributes); 
+    // NOTE(chuck): The child process won't be able to make use of these pipes unless
+    // they have inheritance enabled.
+    SecurityAttributes.bInheritHandle = 1;
+    
+    if(!CreatePipe(&ReadStdout, &WriteStdout, &SecurityAttributes, 0))
+    {
+        Quit("The pipe for capturing build script output could not be created.  "
+                "It is needed in order to debug failures (if any.)\n");
+    }
+
+    STARTUPINFOW StartupInfo = {};
+    PROCESS_INFORMATION ProcessInfo = {};
+    StartupInfo.cb = sizeof(STARTUPINFOW); 
+    StartupInfo.hStdError = WriteStdout;
+    StartupInfo.hStdOutput = WriteStdout;
+    StartupInfo.dwFlags = STARTF_USESTDHANDLES;
+    
+    wchar_t *WindowsDirectory = PushArray(1024, wchar_t);
+    UINT WindowsDirectoryLength = GetWindowsDirectoryW(WindowsDirectory, 1024);
+    if(!WindowsDirectoryLength)
+    {
+        Quit("The Windows directory could not be found.  It is needed in order to "
+                "correctly filter the file I/O events this tool records.\n");
+    }
+
+    wchar_t *CmdExe = PushArray(1024, wchar_t);
+    CopyString(CmdExe, WindowsDirectory);
+    CopyString(CmdExe + WindowsDirectoryLength, L"\\System32\\cmd.exe");
+    char *CmdArgsA = PushSize(1024);
+    FormatString(1024, CmdArgsA, "/c %S", FullBuildScript);
+    wchar_t *CmdArgs = WidenChars(CmdArgsA);
+    
+    // NOTE(chuck): The child process won't be able to read stdout unless handle
+    // inheritance is enabled when creating it.
+    b32 InheritHandles = 1;
+    b32 CreateProcessResult = CreateProcessW(CmdExe, CmdArgs, 0, 0, InheritHandles,
+                                                CREATE_SUSPENDED, 0, 0,
+                                                &StartupInfo, &ProcessInfo);
+    if(!CreateProcessResult)
+    {
+        Quit("A new process could not be created in order to run your build script.\n");
+    }
+
+    Log("Build script %S %S\n", CmdExe, CmdArgs);
+    Log("Windows directory %S\n", WindowsDirectory);
+
+    win32_volume_list VolumeList = Win32GetVolumeList();
+    Log("Volumes (%d)\n", VolumeList.Count);
+    for(umm Index = 0;
+        Index < VolumeList.Count;
+        ++Index)
+    {
+        win32_volume *Volume = VolumeList.Volume + Index;
+        Log("    %S -> %S -> %S\n", Volume->GUID, Volume->DeviceName, Volume->Drive);
+    }
+
+    process *Process = ProcessFilter + ProcessFilterCount++;
+    Process->ImageFilename = PushArray(8, wchar_t);
+    Process->CommandLine = PushArray(StringLength(CmdArgs) + 1, wchar_t);
+    Process->ProcessID = ProcessInfo.dwProcessId;
+    // Printf("  Root process PID %d\n", Process->ProcessID);
+    CopyString(Process->ImageFilename, L"cmd.exe");
+    CopyString(Process->CommandLine, CmdArgs);
+
+    // NOTE(chuck): Start the trace only after we've setup the main process ID for filtering.
+    etw_event_trace *ETWEventTrace = ETWBeginTrace();
+    ETWAddEventType(ETWEventTrace, ETWType_FileIO);
+    ETWAddEventType(ETWEventTrace, ETWType_Process);
+
+    QueryPerformanceCounter(&BuildBeginCounter);
+    InitEndCounter = BuildBeginCounter;
+    Log("Initialization took %.3fs to complete.\n",
+        (InitEndCounter.QuadPart - InitBeginCounter.QuadPart) / (float)Frequency.QuadPart);
+    ResumeThread(ProcessInfo.hThread);
+    
+    // NOTE(chuck): stdout must be closed before reading or we will hang.
+    CloseHandle(WriteStdout);
+
+    int StdoutBufferSize = Megabytes(4);
+    char *StdoutBuffer = PushArray(StdoutBufferSize, char);
+    char *StdoutBufferP = StdoutBuffer;
+    int BytesRemaining = StdoutBufferSize;
+    int TotalBytesRead = 0;
+    b32 GotFullStdout = false;
+
+    for(;;)
+    {
+        DWORD Read;
+        b32 Success = ReadFile(ReadStdout, StdoutBufferP, BytesRemaining, &Read, 0);
+        if(Success)
         {
-            Quit("The pipe for capturing build script output could not be created.  "
-                 "It is needed in order to debug failures (if any.)\n");
-        }
-
-        STARTUPINFOW StartupInfo = {};
-        PROCESS_INFORMATION ProcessInfo = {};
-        StartupInfo.cb = sizeof(STARTUPINFOW); 
-        StartupInfo.hStdError = WriteStdout;
-        StartupInfo.hStdOutput = WriteStdout;
-        StartupInfo.dwFlags = STARTF_USESTDHANDLES;
-        
-        wchar_t *WindowsDirectory = PushArray(1024, wchar_t);
-        UINT WindowsDirectoryLength = GetWindowsDirectoryW(WindowsDirectory, 1024);
-        if(!WindowsDirectoryLength)
-        {
-            Quit("The Windows directory could not be found.  It is needed in order to "
-                 "correctly filter the file I/O events this tool records.\n");
-        }
-
-        wchar_t *CmdExe = PushArray(1024, wchar_t);
-        CopyString(CmdExe, WindowsDirectory);
-        CopyString(CmdExe + WindowsDirectoryLength, L"\\System32\\cmd.exe");
-        char *CmdArgsA = PushSize(1024);
-        FormatString(1024, CmdArgsA, "/c %S", FullBuildScript);
-        wchar_t *CmdArgs = WidenChars(CmdArgsA);
-        
-        // NOTE(chuck): The child process won't be able to read stdout unless handle
-        // inheritance is enabled when creating it.
-        b32 InheritHandles = 1;
-        b32 CreateProcessResult = CreateProcessW(CmdExe, CmdArgs, 0, 0, InheritHandles,
-                                                 CREATE_SUSPENDED, 0, 0,
-                                                 &StartupInfo, &ProcessInfo);
-        if(!CreateProcessResult)
-        {
-            Quit("A new process could not be created in order to run your build script.\n");
-        }
-
-        Log("Build script %S %S\n", CmdExe, CmdArgs);
-        Log("Windows directory %S\n", WindowsDirectory);
-
-        win32_volume_list VolumeList = Win32GetVolumeList();
-        Log("Volumes (%d)\n", VolumeList.Count);
-        for(umm Index = 0;
-            Index < VolumeList.Count;
-            ++Index)
-        {
-            win32_volume *Volume = VolumeList.Volume + Index;
-            Log("    %S -> %S -> %S\n", Volume->GUID, Volume->DeviceName, Volume->Drive);
-        }
-
-        process *Process = ProcessFilter + ProcessFilterCount++;
-        Process->ImageFilename = PushArray(8, wchar_t);
-        Process->CommandLine = PushArray(StringLength(CmdArgs) + 1, wchar_t);
-        Process->ProcessID = ProcessInfo.dwProcessId;
-        // Printf("  Root process PID %d\n", Process->ProcessID);
-        CopyString(Process->ImageFilename, L"cmd.exe");
-        CopyString(Process->CommandLine, CmdArgs);
-
-        // NOTE(chuck): Start the trace only after we've setup the main process ID for filtering.
-        etw_event_trace *ETWEventTrace = ETWBeginTrace();
-        ETWAddEventType(ETWEventTrace, ETWType_FileIO);
-        ETWAddEventType(ETWEventTrace, ETWType_Process);
-
-        QueryPerformanceCounter(&BuildBeginCounter);
-        InitEndCounter = BuildBeginCounter;
-        Log("Initialization took %.3fs to complete.\n",
-            (InitEndCounter.QuadPart - InitBeginCounter.QuadPart) / (float)Frequency.QuadPart);
-        ResumeThread(ProcessInfo.hThread);
-        
-        // NOTE(chuck): stdout must be closed before reading or we will hang.
-        CloseHandle(WriteStdout);
-
-        int StdoutBufferSize = Megabytes(4);
-        char *StdoutBuffer = PushArray(StdoutBufferSize, char);
-        char *StdoutBufferP = StdoutBuffer;
-        int BytesRemaining = StdoutBufferSize;
-        int TotalBytesRead = 0;
-        b32 GotFullStdout = false;
-
-        for(;;)
-        {
-            DWORD Read;
-            b32 Success = ReadFile(ReadStdout, StdoutBufferP, BytesRemaining, &Read, 0);
-            if(Success)
+            TotalBytesRead += Read;
+            StdoutBufferP += Read;
+            *StdoutBufferP = 0;
+            BytesRemaining -= Read;
+            
+            if(BytesRemaining <= 0)
             {
-                TotalBytesRead += Read;
-                StdoutBufferP += Read;
-                *StdoutBufferP = 0;
-                BytesRemaining -= Read;
-                
-                if(BytesRemaining <= 0)
-                {
-                    ETWEndTrace(ETWEventTrace);
-                    Quit("Generation is aborting because the build output exceeded the "
-                         "maximum allowed size of %.1fmb.\n%s", StdoutBufferSize / 1024.0 / 1024.0,
-                         CHANGE_REQUIRES_RECOMPILE);
-                }
-            }
-            else
-            {
-                if(TotalBytesRead && (GetLastError() == ERROR_BROKEN_PIPE))
-                {
-                    GotFullStdout = true;
-                }
-                break;
+                ETWEndTrace(ETWEventTrace);
+                Quit("Generation is aborting because the build output exceeded the "
+                        "maximum allowed size of %.1fmb.\n%s", StdoutBufferSize / 1024.0 / 1024.0,
+                        CHANGE_REQUIRES_RECOMPILE);
             }
         }
-
-        CloseHandle(ReadStdout);
-        CloseHandle(ProcessInfo.hThread);
-        ETWEndTrace(ETWEventTrace);
-
-        if(!GotFullStdout)
+        else
         {
-            Quit("The output of your build script could not be obtained.\nIt is not strictly needed and is only "
-                 "shown when a build script failure is detected.\nHowever, I can't think of any reason why this "
-                 "tool shouldn't always be able to obtain it, so something is probably wrong.\nGeneration has "
-                 "been stopped in order to avoid generating an incorrect result.\n");
+            if(TotalBytesRead && (GetLastError() == ERROR_BROKEN_PIPE))
+            {
+                GotFullStdout = true;
+            }
+            break;
         }
+    }
 
-        DWORD ChildProcessExitCode;
-        if(!GetExitCodeProcess(ProcessInfo.hProcess, &ChildProcessExitCode))
-        {
-            Quit("The exit code for your build script could not be obtained.\nIt is needed in order to confirm "
-                 "that the build succeeded and that the file I/O\nobserved is an accurate representation of the "
-                 "files needed.\n");
-        }
+    CloseHandle(ReadStdout);
+    CloseHandle(ProcessInfo.hThread);
+    ETWEndTrace(ETWEventTrace);
 
-        CloseHandle(ProcessInfo.hProcess);
+    if(!GotFullStdout)
+    {
+        Quit("The output of your build script could not be obtained.\nIt is not strictly needed and is only "
+                "shown when a build script failure is detected.\nHowever, I can't think of any reason why this "
+                "tool shouldn't always be able to obtain it, so something is probably wrong.\nGeneration has "
+                "been stopped in order to avoid generating an incorrect result.\n");
+    }
 
-        if(ChildProcessExitCode)
-        {
-            Quit("Your build script exited with an error code: %d\nIts meaning will be something "
-                 "that is specific to your build.\n\n"
-                 "BUILD OUTPUT (%.1fkb)\n"
-                 "--------------------------\n%s\n",
-                 ChildProcessExitCode,
-                 TotalBytesRead / 1024.0,
-                 StdoutBuffer);
-        }
+    DWORD ChildProcessExitCode;
+    if(!GetExitCodeProcess(ProcessInfo.hProcess, &ChildProcessExitCode))
+    {
+        Quit("The exit code for your build script could not be obtained.\nIt is needed in order to confirm "
+                "that the build succeeded and that the file I/O\nobserved is an accurate representation of the "
+                "files needed.\n");
+    }
 
-        QueryPerformanceCounter(&BuildEndCounter);
-        Log("The build script took %.3fs to complete.\n",
-            (BuildEndCounter.QuadPart - BuildBeginCounter.QuadPart) / (float)Frequency.QuadPart);
+    CloseHandle(ProcessInfo.hProcess);
+
+    if(ChildProcessExitCode)
+    {
+        Quit("Your build script exited with an error code: %d\nIts meaning will be something "
+                "that is specific to your build.\n\n"
+                "BUILD OUTPUT (%.1fkb)\n"
+                "--------------------------\n%s\n",
+                ChildProcessExitCode,
+                TotalBytesRead / 1024.0,
+                StdoutBuffer);
+    }
+
+    QueryPerformanceCounter(&BuildEndCounter);
+    Log("The build script took %.3fs to complete.\n",
+        (BuildEndCounter.QuadPart - BuildBeginCounter.QuadPart) / (float)Frequency.QuadPart);
 
     QueryPerformanceCounter(&EventProcessingBeginCounter);
 
