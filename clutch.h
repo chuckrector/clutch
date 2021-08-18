@@ -6,6 +6,7 @@
 #include <evntcons.h>
 #include <stdint.h>
 
+#include "literals.h"
 #include "types.h"
 #include "strings.h"
 #include "files.h"

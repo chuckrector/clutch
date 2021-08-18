@@ -3,14 +3,26 @@
 static void
 Quit(char *Format, ...)
 {
-    char Buffer[1024];
+    char Buffer[4096];
     va_list Args;
     va_start(Args, Format);
-    FormatStringList(1024, Buffer, Format, Args);
+    FormatStringList(4096, Buffer, Format, Args);
     va_end(Args);
 
     Printf(STD_ERROR_HANDLE, Buffer);
-    ExitProcess(1);
+
+    DWORD ErrorCode = GetLastError();
+    if(ErrorCode)
+    {
+        char ErrorMessageBuffer[4096];
+        DWORD BytesWritten = FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM, 0, ErrorCode, 0, ErrorMessageBuffer, 4096, 0);
+        Printf(STD_ERROR_HANDLE, "\nSystem error code %d: %s\n", ErrorCode, ErrorMessageBuffer);
+        ExitProcess(ErrorCode);
+    }
+    else
+    {
+        ExitProcess(1);
+    }
 }
 
 static void
@@ -23,10 +35,10 @@ InitLog(wchar_t *LogPath)
 static void
 Log(char *Format, ...)
 {
-    char Buffer[1024];
+    char Buffer[4096];
     va_list Args;
     va_start(Args, Format);
-    umm BufferLength = FormatStringList(1024, Buffer, Format, Args);
+    umm BufferLength = FormatStringList(4096, Buffer, Format, Args);
     va_end(Args);
 
     DWORD BytesWritten;

@@ -5,6 +5,8 @@ NOTE(chuck): A general rule about files vs directories:
       even if a directory of the same name exists.
 */
 
+#include "literals.h"
+
 static void
 GetFiles(wchar_t *Path, file_listing *FileListing)
 {
@@ -29,7 +31,8 @@ GetFiles(wchar_t *Path, file_listing *FileListing)
             {
                 if(FileListing->Count >= FileListing->MaxCount)
                 {
-                    Quit("Too many files.  Maximum allowed: %d\n", FileListing->MaxCount);
+                    Quit("Too many files were found -- over %d.\n%s", FileListing->MaxCount,
+                         CHANGE_REQUIRES_RECOMPILE);
                 }
                 file *File = FileListing->List + FileListing->Count++;
                 int FilePathLength = StringLength(FindData.cFileName);
@@ -53,11 +56,18 @@ GetFiles(wchar_t *Path, file_listing *FileListing)
             {
                 if(GetLastError() != ERROR_NO_MORE_FILES)
                 {
-                    Printf(STD_ERROR_HANDLE, "Error finding files.  Error code: %d\n", GetLastError());
+                    Quit("There was a problem finding files in the following path: %S\n", Path);
                 }
-                break;
+                else
+                {
+                    break;
+                }
             }
         }
+    }
+    else
+    {
+        Quit("There was a problem finding the first file in the following path: %S\n", Path);
     }
 }
 
@@ -99,7 +109,7 @@ CreateDirectory(wchar_t *Path)
     {
         if(GetLastError() != ERROR_ALREADY_EXISTS)
         {
-            Quit("Failed to create directory: %S\n  Error code %d\n", Path, GetLastError());
+            Quit("The following directory could not be created: %S\n", Path);
         }
     }
     return(CreationCount);
@@ -120,9 +130,9 @@ DeleteFilesRecursively(wchar_t *Directory)
        here seems to fix the problem. */
     umm Used = GlobalMemoryUsed;
 
-    file_listing FileListing = {1024, 0, PushArray(1024, file)};
+    file_listing FileListing = {1024*10, 0, PushArray(1024*10, file)};
     GetFiles(Directory, &FileListing);
-    Log("Removing %d existing files in %S\n", FileListing.Count, Directory);
+    Log("%d existing files in %S are being deleted.\n", FileListing.Count, Directory);
     // Printf("Removing %d existing files in %S\n", FileListing.Count, Directory);
     for(int Index = 0;
         Index < FileListing.Count;
@@ -133,7 +143,7 @@ DeleteFilesRecursively(wchar_t *Directory)
         {
             if(!DeleteFileW(File->Path))
             {
-                Quit("Failed to delete file: %S\n", File->Path);
+                Quit("The following file could not be deleted: %S\n", File->Path);
             }
         }
     }
@@ -149,7 +159,7 @@ DeleteFilesRecursively(wchar_t *Directory)
         {
             if(!RemoveDirectoryW(File->Path))
             {
-                Quit("Failed to remove directory: %S\n", File->Path);
+                Quit("The following directory could not be removed: %S\n", File->Path);
             }
         }
     }
@@ -201,24 +211,24 @@ CreateDirectoriesRecursively(wchar_t *RootDirectory, wchar_t *RelativePath)
 // TODO(chuck): I refactored all this hastily from a currently unused implementation
 // that I was previously using.  Need to test this out and make sure it still works.
 static recursive_copy
-CopyFilesRecursively(wchar_t *FromFolder, wchar_t *ToFolder)
+CopyFilesRecursively(wchar_t *FromDirectory, wchar_t *ToDirectory)
 {
-    // printf("CopyFolderRecursively %s -> %s\n", FromFolder, ToFolder);
+    // printf("CopyFolderRecursively %s -> %s\n", FromDirectory, ToDirectory);
     recursive_copy Result = {};
 
-    b32 CreateDirectoryResult = CreateDirectory(ToFolder);
+    b32 CreateDirectoryResult = CreateDirectory(ToDirectory);
     if(CreateDirectoryResult || GetLastError() == ERROR_ALREADY_EXISTS)
     {
         ++Result.DirectoriesCreated;
 
-        wchar_t *FromFolderWithoutStar = PushArray(1024, wchar_t);
-        wchar_t *FromFolderWithoutStarP = FromFolderWithoutStar;
-        wchar_t *P = FromFolder;
-        while(*P && *P != '*') *FromFolderWithoutStarP++ = *P++;
-        *FromFolderWithoutStarP = 0;
+        wchar_t *FromDirectoryWithoutStar = PushArray(1024, wchar_t);
+        wchar_t *FromDirectoryWithoutStarP = FromDirectoryWithoutStar;
+        wchar_t *P = FromDirectory;
+        while(*P && *P != '*') *FromDirectoryWithoutStarP++ = *P++;
+        *FromDirectoryWithoutStarP = 0;
 
         WIN32_FIND_DATAW FindData;
-        HANDLE FindHandle = FindFirstFileW(FromFolder, &FindData);
+        HANDLE FindHandle = FindFirstFileW(FromDirectory, &FindData);
         if(FindHandle != INVALID_HANDLE_VALUE)
         {
             b32 NextResult;
@@ -232,32 +242,32 @@ CopyFilesRecursively(wchar_t *FromFolder, wchar_t *ToFolder)
                     b32 IsDotDot = (P[0] == '.') && (P[1] == '.') && !P[2];
                     if(!IsDot && !IsDotDot)
                     {
-                        wchar_t* NestedFromFolder = PushArray(1024, wchar_t);
-                        wchar_t *NestedFromFolderP = NestedFromFolder;
-                        P = FromFolderWithoutStar;
+                        wchar_t* NestedFromDirectory = PushArray(1024, wchar_t);
+                        wchar_t *NestedFromDirectoryP = NestedFromDirectory;
+                        P = FromDirectoryWithoutStar;
                         while(*P)
                         {
-                            *NestedFromFolderP++ = *P++;
+                            *NestedFromDirectoryP++ = *P++;
                         }
                         P = FindData.cFileName;
                         while(*P)
                         {
-                            *NestedFromFolderP++ = *P++;
+                            *NestedFromDirectoryP++ = *P++;
                         }
-                        *NestedFromFolderP++ = '\\';
-                        *NestedFromFolderP++ = '*';
-                        *NestedFromFolderP = 0;
+                        *NestedFromDirectoryP++ = '\\';
+                        *NestedFromDirectoryP++ = '*';
+                        *NestedFromDirectoryP = 0;
 
-                        wchar_t *NestedToFolder = PushArray(1024, wchar_t);
-                        wchar_t *NestedToFolderP = NestedToFolder;
-                        P = ToFolder;
-                        while(*P) *NestedToFolderP++ = *P++;
-                        *NestedToFolderP++ = '\\';
+                        wchar_t *NestedToDirectory = PushArray(1024, wchar_t);
+                        wchar_t *NestedToDirectoryP = NestedToDirectory;
+                        P = ToDirectory;
+                        while(*P) *NestedToDirectoryP++ = *P++;
+                        *NestedToDirectoryP++ = '\\';
                         P = FindData.cFileName;
-                        while(*P) *NestedToFolderP++ = *P++;
-                        *NestedToFolderP = 0;
+                        while(*P) *NestedToDirectoryP++ = *P++;
+                        *NestedToDirectoryP = 0;
 
-                        recursive_copy NestedResult = CopyFilesRecursively(NestedFromFolder, NestedToFolder);
+                        recursive_copy NestedResult = CopyFilesRecursively(NestedFromDirectory, NestedToDirectory);
                         Result.FilesCreated += NestedResult.FilesCreated;
                         Result.DirectoriesCreated += NestedResult.DirectoriesCreated;
                     }
@@ -266,7 +276,7 @@ CopyFilesRecursively(wchar_t *FromFolder, wchar_t *ToFolder)
                 {
                     wchar_t *ToFile = PushArray(1024, wchar_t);
                     wchar_t *ToFileP = ToFile;
-                    P = ToFolder;
+                    P = ToDirectory;
                     while(*P) *ToFileP++ = *P++;
                     *ToFileP++ = '\\';
                     P = FindData.cFileName;
@@ -275,7 +285,7 @@ CopyFilesRecursively(wchar_t *FromFolder, wchar_t *ToFolder)
 
                     wchar_t *FromFile = PushArray(1024, wchar_t);
                     wchar_t *FromFileP = FromFile;
-                    P = FromFolderWithoutStar;
+                    P = FromDirectoryWithoutStar;
                     while(*P) *FromFileP++ = *P++;
                     if(FromFileP[-1] != '\\') *FromFileP++ = '\\';
                     P = FindData.cFileName;
@@ -289,7 +299,7 @@ CopyFilesRecursively(wchar_t *FromFolder, wchar_t *ToFolder)
                     }
                     else
                     {
-                        Quit("Unable to copy %s to %s\n", FromFile, ToFile);
+                        Quit("There was a problem copying `%s` to `%s`.\n", FromFile, ToFile);
                     }
                 }
 
@@ -298,12 +308,12 @@ CopyFilesRecursively(wchar_t *FromFolder, wchar_t *ToFolder)
         }
         else
         {
-            Quit("Unable to find first file in folder: %s\n", FromFolder);
+            Quit("There was a problem finding the first file in the following directory: %s\n", FromDirectory);
         }
     }
     else
     {
-        Quit("Unable to create target folder: %s\n  Error code %d\n", ToFolder, GetLastError());
+        Quit("The following directory could not be created: %s\n", ToDirectory);
     }
 
     return(Result);
@@ -316,7 +326,7 @@ GetFullPath(wchar_t *Path)
     DWORD CharsWritten = GetFullPathNameW(Path, 1024, FullPath, 0);
     if(!CharsWritten)
     {
-        Quit("GetFullPath: Failed to write chars.  Error code %d\n", GetLastError());
+        Quit("There was a problem getting the full path name for the following path:\n    %S\n", Path);
     }
     return(FullPath);
 }
@@ -366,11 +376,15 @@ Win32DevicePathToDrivePath(win32_volume_list *VolumeList, wchar_t *DevicePath)
     Assert(StringStartsWith(DevicePath, DevicePrefix));
 
     // NOTE(chuck): In \Device\HarddiskVolume1\foo skip to foo
-    wchar_t *P = DevicePath + StringLength(DevicePrefix);
-    while(*P && *P != '\\') ++P;
-    ++P;
-    umm DeviceNameLength = (P - DevicePath);
-    wchar_t *VolumePath = P; // NOTE(chuck): Points to foo
+    umm DeviceNameLength;
+    wchar_t *VolumePath;
+    {
+        wchar_t *P = DevicePath + StringLength(DevicePrefix);
+        while(*P && *P != '\\') ++P;
+        ++P;
+        DeviceNameLength = (P - DevicePath);
+        VolumePath = P; // NOTE(chuck): Points to foo
+    }
     umm DevicePathLength = StringLength(DevicePath);
     umm VolumePathLength = DevicePathLength - DeviceNameLength;
 
@@ -391,16 +405,26 @@ Win32DevicePathToDrivePath(win32_volume_list *VolumeList, wchar_t *DevicePath)
 
     if(!Result)
     {
-        Printf(STD_ERROR_HANDLE, "Failed to remap device path to drive path: %S\n");
-        Printf(STD_ERROR_HANDLE, "  Volumes searched:\n");
+        umm VolumesSearchedBufferSize = Kilobytes(2048);
+        char *VolumesSearchedBuffer = PushArray(VolumesSearchedBufferSize, char);
+        char *P = VolumesSearchedBuffer;
+        umm BytesWritten = FormatString(VolumesSearchedBufferSize, P, "Volumes searched:\n");
+        VolumesSearchedBufferSize -= BytesWritten;
+        P += BytesWritten;
+
         for(umm Index = 0;
             Index < VolumeList->Count;
             ++Index)
         {
             win32_volume *Volume = VolumeList->Volume + Index;
-            Printf(STD_ERROR_HANDLE, "    %S (%S)\n", Volume->DeviceName, Volume->Drive);
+            BytesWritten = FormatString(VolumesSearchedBufferSize, P, "    %S -> %S -> %S\n",
+                                        Volume->GUID, Volume->DeviceName, Volume->Drive);
+            VolumesSearchedBufferSize += BytesWritten;
+            P += BytesWritten;
         }
-        Quit("");
+
+        Quit("A mapping for the following device path could not be found:\n"
+             "    %S\n%s", DevicePath, VolumesSearchedBuffer);
     }
 
     return(Result);
@@ -434,7 +458,7 @@ Win32GetVolumeList()
     HANDLE VolumeHandle = FindFirstVolumeW(VolumeName, 1024);
     if(VolumeHandle == INVALID_HANDLE_VALUE)
     {
-        Quit("Failed to find the first volume.  Error code %d\n", GetLastError());
+        Quit("There was a problem finding the first volume on your computer.\n");
     }
 
     do
@@ -442,7 +466,8 @@ Win32GetVolumeList()
         umm VolumeNameLength = StringLength(VolumeName);
         if(Result.Count >= Result.MaxCount)
         {
-            Quit("Too many volumes.  Maximum allowed: %d\n", Result.MaxCount);
+            Quit("Too many volumes were found on your computer -- over %d.\n%s",
+                Result.MaxCount, CHANGE_REQUIRES_RECOMPILE);
         }
         win32_volume *Volume = Result.Volume + Result.Count++;
         
@@ -457,14 +482,14 @@ Win32GetVolumeList()
         DWORD DeviceNameBytesWritten = QueryDosDeviceW(QueryName, Volume->DeviceName, 32);
         if(!DeviceNameBytesWritten)
         {
-            Quit("Failed to query the DOS device: %S\n  Error code %d\n", QueryName, GetLastError());
+            Quit("There was a problem getting the MS-DOS device name for the following volume:\n    %S\n", QueryName);
         }
 
         DWORD ReturnLength;
         BOOL OK = GetVolumePathNamesForVolumeNameW(Volume->GUID, Volume->Drive, 1024, &ReturnLength);
         if(!OK)
         {
-            Quit("Failed to get volume path names for volume name: %S\n  Error code %d\n", VolumeName, GetLastError());
+            Quit("There was a probelm getting the drive mappings for the following volume:\n    %S\n", VolumeName);
         }
         Volume->DriveLength = StringLength(Volume->Drive);
 

@@ -6,7 +6,6 @@ in getting more serious about becoming a better programmer and writing useful pr
 This is the third program I've been working on in the past 6mo or so along those lines.
 */
 // TODO(chuck): Add timestamps, elapsed time, and total size in the log.
-// TODO(chuck): Proper English error messages.  Convert GetLastError() codes to English.
 
 #include "clutch.h"
 
@@ -61,7 +60,9 @@ main()
     smm FullBuildScriptLastSlashIndex = GetLastCharIndexInString(FullBuildScript, '\\');
     if(FullBuildScriptLastSlashIndex == -1)
     {
-        Quit("Couldn't find the trailing backslash in the build script path: %S\n", FullBuildScript);
+        Quit("A trailing backslash in the full build script path couldn't be found.\n"
+             "It is needed in order to correctly filter the file I/O events that this tool records.\n"
+             "The full build script path is: %S\n", FullBuildScript);
     }
 
     wchar_t *FullTargetDirectory = GetFullPath(TargetDirectory);
@@ -139,7 +140,8 @@ main()
         
         if(!CreatePipe(&ReadStdout, &WriteStdout, &SecurityAttributes, 0))
         {
-            Quit("Failed to create stdout pipe.  Error code %d\n", GetLastError());
+            Quit("The pipe for capturing build script output could not be created.  "
+                 "It is needed in order to debug failures (if any.)\n");
         }
 
         STARTUPINFOW StartupInfo = {};
@@ -153,7 +155,8 @@ main()
         UINT WindowsDirectoryLength = GetWindowsDirectoryW(WindowsDirectory, 1024);
         if(!WindowsDirectoryLength)
         {
-            Quit("Failed to get the Windows directory.  Error code %d\n", GetLastError());
+            Quit("The Windows directory could not be found.  It is needed in order to "
+                 "correctly filter the file I/O events this tool records.\n");
         }
 
         wchar_t *CmdExe = PushArray(1024, wchar_t);
@@ -171,11 +174,11 @@ main()
                                                  &StartupInfo, &ProcessInfo);
         if(!CreateProcessResult)
         {
-            Quit("Failed to create process.  Error code %d\n", GetLastError());
+            Quit("A new process could not be created in order to run your build script.\n");
         }
 
         Log("Build script %S %S\n", CmdExe, CmdArgs);
-        Log("Windows directory: %S\n", WindowsDirectory);
+        Log("Windows directory %S\n", WindowsDirectory);
         Log(VolumeListingBuffer);
 
         process *Process = ProcessFilter + ProcessFilterCount++;
@@ -217,7 +220,9 @@ main()
                 if(BytesRemaining <= 0)
                 {
                     ETWEndTrace(ETWEventTrace);
-                    Quit("Aborting because the build output exceeded %5.1fmb.\n", StdoutBufferSize / 1024.0 / 1024.0);
+                    Quit("Generation is aborting because the build output exceeded the "
+                         "maximum allowed size of %.1fmb.\n%s", StdoutBufferSize / 1024.0 / 1024.0,
+                         CHANGE_REQUIRES_RECOMPILE);
                 }
             }
             else
@@ -236,20 +241,26 @@ main()
 
         if(!GotFullStdout)
         {
-            Quit("Aborting because an unexpected error happened while reading the build output: %d\n", GetLastError());
+            Quit("The output of your build script could not be obtained.\nIt is not strictly needed and is only "
+                 "shown when a build script failure is detected.\nHowever, I can't think of any reason why this "
+                 "tool shouldn't always be able to obtain it, so something is probably wrong.\nGeneration has "
+                 "been stopped in order to avoid generating an incorrect result.\n");
         }
 
         DWORD ChildProcessExitCode;
         if(!GetExitCodeProcess(ProcessInfo.hProcess, &ChildProcessExitCode))
         {
-            Quit("Unable to get the error code for the build script.  The error reported by the system is: %d\n", GetLastError());
+            Quit("The exit code for your build script could not be obtained.\nIt is needed in order to confirm "
+                 "that the build succeeded and that the file I/O\nobserved is an accurate representation of the "
+                 "files needed.\n");
         }
 
         CloseHandle(ProcessInfo.hProcess);
 
         if(ChildProcessExitCode)
         {
-            Quit("The build script returned an error code: %d\n\n"
+            Quit("Your build script exited with an error code: %d\nIts meaning will be something "
+                 "that is specific to your build.\n\n"
                  "BUILD OUTPUT (%.1fkb)\n"
                  "--------------------------\n%s\n",
                  ChildProcessExitCode,
@@ -342,7 +353,9 @@ main()
                         {
                             if(NeededFileCount >= NEEDED_FILE_MAX)
                             {
-                                Quit("Too many needed files.  Maximum allowed: %d\n", NEEDED_FILE_MAX);
+                                Quit("The number of files needed in order to generate a portable cl.exe distribution "
+                                     "for your build script is too high -- over %d.\n%s", NEEDED_FILE_MAX,
+                                     CHANGE_REQUIRES_RECOMPILE);
                             }
 
                             wchar_t *NewPathFilename = GetFilename(Path);
@@ -355,7 +368,13 @@ main()
                                 wchar_t *ExistingPathFilename = GetFilename(NeededFile->Path);
                                 if(StringsAreEqualWithinLength(ExistingPathFilename, NewPathFilename, NewPathFilenameLength))
                                 {
-                                    Quit("Dependencies are not unique:\n  %S\n  %S\n", NeededFile->Path, Path);
+                                    Quit("The files needed in order to generate a portable cl.exe distribution for "
+                                         "your build script\ncannot be merged because all of the filenames needed are not "
+                                         "globally unique.\n"
+                                         "This is an arbitrarily imposed constraint which seemed reasonable for most builds.\n"
+                                         "If that is not the case for your build, please file an issue here:\n"
+                                         "    https://github.com/chuckrector/clutch/issues\n\n"
+                                         "The files which conflicted are:\n  %S\n  %S\n", NeededFile->Path, Path);
                                 }
                             }
 
@@ -387,7 +406,8 @@ main()
                 {
                     if(ProcessFilterCount >= PROCESS_FILTER_MAX)
                     {
-                        Quit("Too many processes.  Maximum allowed: %d\n", PROCESS_FILTER_MAX);
+                        Quit("Too many processes were spawned by your build script -- over %d.\n%s",
+                             PROCESS_FILTER_MAX, CHANGE_REQUIRES_RECOMPILE);
                     }
                     process *Process = ProcessFilter + ProcessFilterCount++;
                     Process->ImageFilename = Event->Process.ImageFilename;
@@ -439,7 +459,10 @@ main()
                     smm Index = GetLastCharIndexInString(CompilerDirectory, '\\');
                     if(Index == -1)
                     {
-                        Quit("Couldn't find the trailing backslash in the compiler directory: %S\n", TargetFilename);
+                        Quit("A trailing backslash in the full compiler path couldn't be found, which is very strange.\n"
+                             "It is needed in order to correctly filter the file I/O events that this tool records, for\n"
+                             "the purpose of preserving certain subdirectories (e.g. locale-specific).\n"
+                             "The full compiler directory is:\n    %S\n", CompilerDirectory);
                     }
                     CompilerDirectory[Index + 1] = 0;
                     // Log("Compiler directory %S\n", CompilerDirectory);
@@ -466,7 +489,9 @@ main()
         wchar_t *TargetPathW = WidenChars(TargetPath);
         if(!CopyFileW(NeededFile->Path, TargetPathW, 0))
         {
-            Quit("Failed to copy file:\n  %S\n  %S\n  Error code %d\n", NeededFile->Path, TargetPathW, GetLastError());
+            Quit("A file that is needed in order to generate a portable cl.exe distribution for your build script "
+                 "could not be copied.\n\nThat file is:\n  %S\nIt could not be copied to this location:\n  %S\n",
+                 NeededFile->Path, TargetPathW, GetLastError());
         }
 
         if(StringEndsWith(NeededFile->Path, L".dll"))      ++TotalDLLFilesCopied;

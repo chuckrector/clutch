@@ -26,3 +26,4 @@ pushd build
 REM NOTE(chuck): start /b allows parallel compilation
 start /b cl %CompilerFlags% ..\%CurrentFolderName%.cpp /link %LinkerFlags% advapi32.lib
 start /b cl %CompilerFlags% ..\tests.cpp /link %LinkerFlags%
+

@@ -3,7 +3,8 @@ ETWEventAdd(etw_event_trace *Trace)
 {
     if(Trace->EventCount >= ETW_EVENT_MAX)
     {
-        Quit("Too many events occurred.  Maximum allowed: %d\n", ETW_EVENT_MAX);
+        Quit("Too many file I/O events occurred -- over %d.\n%s",
+             ETW_EVENT_MAX, CHANGE_REQUIRES_RECOMPILE);
     }
     etw_event *Result = Trace->EventList + Trace->EventCount++;
     return(Result);
@@ -95,25 +96,30 @@ ETWBeginTrace()
     HANDLE Token;
     if(!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY|TOKEN_ADJUST_PRIVILEGES, &Token))
     {
-        Quit("Unable to open process token.  Error code %d\n", GetLastError());
+        Quit("Event Tracing for Windows could not begin because an access token could not be obtained.\n"
+             "The access token is needed in order to determine whether elevated privileges are available.\n");
     }
 
     TOKEN_ELEVATION Elevation;
     DWORD Size;
     if(!GetTokenInformation(Token, TokenElevation, &Elevation, sizeof(Elevation), &Size))
     {
-        Quit("Unable get token information.  Error code %d\n", GetLastError());
+        Quit("Event Tracing for Windows could not begin because there was a problem querying the access token.\n"
+             "Elevated privileges are required in order to run this tool and it cannot be determined whether\n"
+             "those privilieges are available unless the access token can be queried.\n");
     }
         
     if(!Elevation.TokenIsElevated)
     {
-        Quit("Elevated privileges are required.  Error code %d\n", GetLastError());
+        Quit("Event Tracing for Windows could not begin because elevated privileges are required.\n"
+             "Please relaunch Clutch from a command-line that has administrator privileges.\n");
     }
 
     LUID LocallyUniqueID;
     if(!LookupPrivilegeValueA(0, SE_SYSTEM_PROFILE_NAME, &LocallyUniqueID))
     {
-        Quit("Unable to lookup profiling privilege.  Error code %d\n", GetLastError());
+        Quit("Event Tracing for Windows could not begin because there was a problem looking up the\n"
+             "LUID (locally unique identifier) for system profiling privileges.\n");
     }
 
     TOKEN_PRIVILEGES TokenPrivileges;
@@ -123,7 +129,7 @@ ETWBeginTrace()
     
     if(!AdjustTokenPrivileges(Token, 0, &TokenPrivileges, sizeof(TokenPrivileges), 0, 0))
     {
-        Quit("Unable to adjust token privilege.  Error code %d\n", GetLastError());
+        Quit("Event Tracing for Windows could not begin because there was a problem enabling system profiling privileges.\n");
     }
 
     SYSTEM_INFO SystemInfo;
@@ -154,7 +160,7 @@ ETWBeginTrace()
     ULONG StartTraceResult = StartTraceW(&Session, KERNEL_LOGGER_NAMEW, TraceProps);
     if(StartTraceResult != ERROR_SUCCESS)
     {
-        Quit("Unable to start trace.  Error code %d\n", StartTraceResult);
+        Quit("Event Tracing for Windows could not begin because starting the trace failed.\n");
     }
 
     EVENT_TRACE_LOGFILEW TraceLogFile = {};
@@ -168,7 +174,7 @@ ETWBeginTrace()
     {
         ControlTraceResult = ControlTraceW(0, KERNEL_LOGGER_NAMEW, TraceProps, EVENT_TRACE_CONTROL_STOP);
 
-        Quit("Unable to open trace.  Exit code %d\n", GetLastError());
+        Quit("Event Tracing for Windows could not begin because opening the trace failed.\n", GetLastError());
     }
 
     Internal->TraceThread = CreateThread(0, 0, TraceProcessThread, &Internal->TraceHandle, 0, 0);
@@ -177,7 +183,8 @@ ETWBeginTrace()
         ControlTraceW(0, KERNEL_LOGGER_NAMEW, TraceProps, EVENT_TRACE_CONTROL_STOP);
         CloseTrace(Internal->TraceHandle);
 
-        Quit("Unable to create trace thread.  Error code %d\n", GetLastError());
+        Quit("Event Tracing for Windows could not begin because a new thread for processing "
+             "trace event records could not be created.\n");
     }
 
     Result->Error = 0;
