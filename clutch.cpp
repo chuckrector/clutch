@@ -98,9 +98,9 @@ main()
     /* NOTE(chuck): DeleteFilesRecursively will fail if the log file is opened beforehand, since the
        log file exists in the target directory.  I added buffering to the log so that this could be
        moved down and yet still preserve all the logging that came before.  I don't want to put the
-       log file in the current directory because that would be "littering".  It also double as a manifest
-       of the files copied, so I think it makes sense to package it up with all the other generated
-       files. */
+       log file in the current directory because that would be "littering".  It also doubles as a
+       manifest of the files copied, so I think it makes sense to package it up with all the other
+       generated files. */
     char *LogPath = PushArray(1024, char);
     FormatString(1024, LogPath, "%S\\clutch.log", FullTargetDirectory);
     InitLog(WidenChars(LogPath));
