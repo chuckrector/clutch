@@ -13,6 +13,9 @@ struct file_listing
     int MaxCount;
     int Count;
     file *List;
+
+    int FileCount;
+    int DirectoryCount;
 };
 
 // TODO(chuck): Use file instead?

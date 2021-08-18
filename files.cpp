@@ -46,7 +46,12 @@ GetFiles(wchar_t *Path, file_listing *FileListing)
 
                 if(File->IsDirectory)
                 {
+                    ++FileListing->DirectoryCount;
                     GetFiles(File->Path, FileListing);
+                }
+                else
+                {
+                    ++FileListing->FileCount;
                 }
             }
             
@@ -127,9 +132,33 @@ DeleteFilesRecursively(wchar_t *Directory)
     GetFiles(Directory, &FileListing);
     if(FileListing.Count)
     {
-        char *Plural = "";
-        if(FileListing.Count > 1) Plural = "s";
-        Log("%d existing file%s in %S are being deleted.\n", FileListing.Count, Plural, Directory);
+        // NOTE(chuck): ARE YOU NOT ENTERTAINED?!
+        if(FileListing.Count == 1)
+        {
+            if(FileListing.List[0].IsDirectory)
+            {
+                Log("%d existing directory in %S is being deleted.\n", FileListing.Count, Directory);
+            }
+            else
+            {
+                Log("%d existing file in %S is being deleted.\n", FileListing.Count, Directory);
+            }
+        }
+        else
+        {
+            if(FileListing.FileCount && FileListing.DirectoryCount)
+            {
+                Log("%d existing files and directories in %S are being deleted.\n", FileListing.Count, Directory);
+            }
+            else if(!FileListing.FileCount)
+            {
+                Log("%d existing directories in %S are being deleted.  There were no existing files.\n", FileListing.Count, Directory);
+            }
+            else
+            {
+                Log("%d existing files in %S are being deleted.  There were no existing directories.\n", FileListing.Count, Directory);
+            }
+        }
     }
     // Printf("Removing %d existing files in %S\n", FileListing.Count, Directory);
     for(int Index = 0;

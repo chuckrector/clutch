@@ -14,14 +14,15 @@ main()
     LARGE_INTEGER Frequency;
     LARGE_INTEGER BeginCounter;
     LARGE_INTEGER EndCounter;
+    LARGE_INTEGER InitBeginCounter;
+    LARGE_INTEGER InitEndCounter;
     LARGE_INTEGER BuildBeginCounter;
     LARGE_INTEGER BuildEndCounter;
     LARGE_INTEGER EventProcessingBeginCounter;
     LARGE_INTEGER EventProcessingEndCounter;
     QueryPerformanceFrequency(&Frequency);
     QueryPerformanceCounter(&BeginCounter);
-
-    InitLog(L"clutch.log");
+    InitBeginCounter = BeginCounter;
 
     program_args ProgramArgs = GetProgramArgs();
     
@@ -80,17 +81,29 @@ main()
     int TotalDirectoriesCreated = 0;
 
     TotalDirectoriesCreated += CreateDirectory(FullTargetDirectory);
-
-    LARGE_INTEGER BeginDeleteCounter;
-    LARGE_INTEGER EndDeleteCounter;
-    QueryPerformanceCounter(&BeginDeleteCounter);
-    umm FilesDeleted = DeleteFilesRecursively(FullTargetDirectory);
-    QueryPerformanceCounter(&EndDeleteCounter);
-    if(FilesDeleted)
+    if(!TotalDirectoriesCreated) // NOTE(chuck): Already exists
     {
-        Log("Deleting the existing files took %.3fs.\n",
-            (EndDeleteCounter.QuadPart - BeginDeleteCounter.QuadPart) / (float)Frequency.QuadPart);
+        LARGE_INTEGER BeginDeleteCounter;
+        LARGE_INTEGER EndDeleteCounter;
+        QueryPerformanceCounter(&BeginDeleteCounter);
+        umm FilesDeleted = DeleteFilesRecursively(FullTargetDirectory);
+        QueryPerformanceCounter(&EndDeleteCounter);
+        if(FilesDeleted)
+        {
+            Log("Deleting the existing files took %.3fs to complete.\n",
+                (EndDeleteCounter.QuadPart - BeginDeleteCounter.QuadPart) / (float)Frequency.QuadPart);
+        }
     }
+
+    /* NOTE(chuck): DeleteFilesRecursively will fail if the log file is opened beforehand, since the
+       log file exists in the target directory.  I added buffering to the log so that this could be
+       moved down and yet still preserve all the logging that came before.  I don't want to put the
+       log file in the current directory because that would be "littering".  It also double as a manifest
+       of the files copied, so I think it makes sense to package it up with all the other generated
+       files. */
+    char *LogPath = PushArray(1024, char);
+    FormatString(1024, LogPath, "%S\\clutch.log", FullTargetDirectory);
+    InitLog(WidenChars(LogPath));
 
     char *TargetIncludeDirectoryA = PushSize(1024);
     FormatString(1024, TargetIncludeDirectoryA, "%S\\include", FullTargetDirectory);
@@ -183,6 +196,9 @@ main()
         ETWAddEventType(ETWEventTrace, ETWType_Process);
 
         QueryPerformanceCounter(&BuildBeginCounter);
+        InitEndCounter = BuildBeginCounter;
+        Log("Initialization took %.3fs to complete.\n",
+            (InitEndCounter.QuadPart - InitBeginCounter.QuadPart) / (float)Frequency.QuadPart);
         ResumeThread(ProcessInfo.hThread);
         
         // NOTE(chuck): stdout must be closed before reading or we will hang.
@@ -258,7 +274,8 @@ main()
         }
 
         QueryPerformanceCounter(&BuildEndCounter);
-        Log("Build took %.3fs\n", (BuildEndCounter.QuadPart - BuildBeginCounter.QuadPart) / (float)Frequency.QuadPart);
+        Log("The build script took %.3fs to complete.\n",
+            (BuildEndCounter.QuadPart - BuildBeginCounter.QuadPart) / (float)Frequency.QuadPart);
 
     QueryPerformanceCounter(&EventProcessingBeginCounter);
 
@@ -496,25 +513,34 @@ main()
     }
 
     QueryPerformanceCounter(&EventProcessingEndCounter);
-    Log("Event processing took %.3fs\n", (EventProcessingEndCounter.QuadPart - EventProcessingBeginCounter.QuadPart) / (float)Frequency.QuadPart);
+    Log("Event processing took %.3fs to complete.\n",
+        (EventProcessingEndCounter.QuadPart - EventProcessingBeginCounter.QuadPart) / (float)Frequency.QuadPart);
 
     Log("\n");
     Log("%4d directories created\n", TotalDirectoriesCreated);
+    Log("%4d .log file generated (this file)\n", 1);
     Log("%4d .dll\n", TotalDLLFilesCopied);
     Log("%4d .exe\n", TotalEXEFilesCopied);
     Log("%4d .h\n", TotalHFilesCopied);
     Log("%4d .lib\n", TotalLibFilesCopied);
     Log("%4d .pdb\n", TotalPDBFilesCopied);
-    Log("%4d total files copied\n", TotalFilesCopied);
-    
-    // Printf("%d bytes of memory used\n", GlobalMemoryUsed);
-    // Printf("%d total files copied\n", TotalFilesCopied);
-    Printf("Portable cl.exe generated in %S\n", FullTargetDirectory);
-    // Printf("See %S for details.\n", LogPath.Data);
+    Log("%4d total files copied\n\n", TotalFilesCopied);
 
     // TODO(chuck): End timing
     QueryPerformanceCounter(&EndCounter);
-    Printf("Took %.3fs\n", (EndCounter.QuadPart - BeginCounter.QuadPart) / (float)Frequency.QuadPart);
+    Log("It took %.3fs for everything to complete.\n\n",
+        (EndCounter.QuadPart - BeginCounter.QuadPart) / (float)Frequency.QuadPart);
+
+    Log("An example of using this portable distribution without modifying your\n");
+    Log("environment would be to change your build script like so:\n\n");
+    Log("   * Compile with this executable: %S\\cl.exe\n", FullTargetDirectory);
+    Log("   * Add this to your compiler options: /I%S\\include\n", FullTargetDirectory);
+    Log("   * Add this to your linker options: /libpath:%S\\lib\n\n", FullTargetDirectory);
+
+    // Printf("%d bytes of memory used\n", GlobalMemoryUsed);
+    // Printf("%d total files copied\n", TotalFilesCopied);
+    Printf("A portable cl.exe has been generated here: %S\n", FullTargetDirectory);
+    // Printf("See %S for details.\n", LogPath.Data);
 
     return(0);
 }
