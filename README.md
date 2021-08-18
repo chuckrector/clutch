@@ -42,5 +42,5 @@ For more details, run `clutch` without any arguments.
 # References
 
 - [Event Tracing for Windows](https://docs.microsoft.com/en-us/windows/win32/etw/about-event-tracing)
-- [THE WORST API EVER MADE](https://caseymuratori.com/blog_0025)
+- [THE WORST API EVER MADE - Casey Muratori](https://caseymuratori.com/blog_0025)
 - [Handmade Hero Day 001 - Setting Up the Windows Build @ 47m25s](https://www.youtube.com/watch?v=Ee3EtYb8d1o&t=2845s)
