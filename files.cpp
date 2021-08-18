@@ -163,7 +163,7 @@ DeleteFilesRecursively(wchar_t *Directory)
     // Printf("Removing %d existing files in %S\n", FileListing.Count, Directory);
     for(int Index = 0;
         Index < FileListing.Count;
-        ++Index, ++FilesDeleted)
+        ++Index)
     {
         file* File = FileListing.List + Index;
         if(!File->IsDirectory)
@@ -172,6 +172,7 @@ DeleteFilesRecursively(wchar_t *Directory)
             {
                 Quit("The following file could not be deleted: %S\n", File->Path);
             }
+            ++FilesDeleted;
         }
     }
 
@@ -179,7 +180,7 @@ DeleteFilesRecursively(wchar_t *Directory)
     // come last, so delete them in reverse order.
     for(int Index = FileListing.Count - 1;
         Index >= 0;
-        --Index, FilesDeleted)
+        --Index)
     {
         file *File = FileListing.List + Index;
         if(File->IsDirectory)
@@ -188,6 +189,7 @@ DeleteFilesRecursively(wchar_t *Directory)
             {
                 Quit("The following directory could not be removed: %S\n", File->Path);
             }
+            ++FilesDeleted;
         }
     }
 
