@@ -5,13 +5,24 @@ things in here, it's because I'm learning and trying out a lot of things. I'm in
 in getting more serious about becoming a better programmer and writing useful programs.
 This is the third program I've been working on in the past 6mo or so along those lines.
 */
-// TODO(chuck): Add timestamps, elapsed time, and total size in the log.
 
 #include "clutch.h"
 
 int
 main()
 {
+    LARGE_INTEGER Frequency;
+    LARGE_INTEGER BeginCounter;
+    LARGE_INTEGER EndCounter;
+    LARGE_INTEGER BuildBeginCounter;
+    LARGE_INTEGER BuildEndCounter;
+    LARGE_INTEGER EventProcessingBeginCounter;
+    LARGE_INTEGER EventProcessingEndCounter;
+    QueryPerformanceFrequency(&Frequency);
+    QueryPerformanceCounter(&BeginCounter);
+
+    InitLog(L"clutch.log");
+
     program_args ProgramArgs = GetProgramArgs();
     
     if(!((ProgramArgs.Count == 2) || (ProgramArgs.Count == 3)))
@@ -48,13 +59,8 @@ main()
         TargetDirectory = GetArg(&ProgramArgs, 2);
     }
 
-    wchar_t *CurrentDirectory = PushArray(1024, wchar_t);
-    GetCurrentDirectoryW(1024, CurrentDirectory);
-    int CurrentDirectoryLength = StringLength(CurrentDirectory);
-    if(CurrentDirectory[CurrentDirectoryLength - 1] != '\\')
-    {
-        CurrentDirectory[CurrentDirectoryLength++] = '\\';
-    }
+    wchar_t *FullTargetDirectory = GetFullPath(TargetDirectory);
+    Log("Target %S\n", FullTargetDirectory);
 
     wchar_t *FullBuildScript = GetFullPath(BuildScript);
     smm FullBuildScriptLastSlashIndex = GetLastCharIndexInString(FullBuildScript, '\\');
@@ -65,8 +71,6 @@ main()
              "The full build script path is: %S\n", FullBuildScript);
     }
 
-    wchar_t *FullTargetDirectory = GetFullPath(TargetDirectory);
-
     int TotalFilesCopied = 0;
     int TotalHFilesCopied = 0;
     int TotalLibFilesCopied = 0;
@@ -75,41 +79,18 @@ main()
     int TotalEXEFilesCopied = 0;
     int TotalDirectoriesCreated = 0;
 
-    // NOTE(chuck): Target directory must exist prior to opening the log (which doubles as a manifest).
     TotalDirectoriesCreated += CreateDirectory(FullTargetDirectory);
-    if(!TotalDirectoriesCreated)
+
+    LARGE_INTEGER BeginDeleteCounter;
+    LARGE_INTEGER EndDeleteCounter;
+    QueryPerformanceCounter(&BeginDeleteCounter);
+    umm FilesDeleted = DeleteFilesRecursively(FullTargetDirectory);
+    QueryPerformanceCounter(&EndDeleteCounter);
+    if(FilesDeleted)
     {
-        // NOTE(chuck): Delete all files before opening log because log will hold a lock on the file
-        // and cause any deletion attempts to fail.
-        DeleteFilesRecursively(FullTargetDirectory);
+        Log("Deleting the existing files took %.3fs.\n",
+            (EndDeleteCounter.QuadPart - BeginDeleteCounter.QuadPart) / (float)Frequency.QuadPart);
     }
-
-    // TODO(chuck): For reasons I don't yet understand, getting the volume list fails if I attempt to
-    // do it after opening the log file.  Why??
-    win32_volume_list VolumeList = Win32GetVolumeList();
-    umm VolumeListingBufferSize = Kilobytes(4);
-    char *VolumeListingBuffer = PushArray(VolumeListingBufferSize, char);
-    {
-        char *P = VolumeListingBuffer;
-        umm BytesWritten = FormatString(VolumeListingBufferSize, P, "Volumes (%d)\n", VolumeList.Count);
-        VolumeListingBufferSize -= BytesWritten;
-        P += BytesWritten;
-        for(umm Index = 0;
-            Index < VolumeList.Count;
-            ++Index)
-        {
-            win32_volume *Volume = VolumeList.Volume + Index;
-            BytesWritten = FormatString(VolumeListingBufferSize, P, "    %S -> %S -> %S\n", Volume->GUID, Volume->DeviceName, Volume->Drive);
-            VolumeListingBufferSize -= BytesWritten;
-            P += BytesWritten;
-        }
-    }
-
-    char *LogPathA = PushSize(1024);
-    FormatString(1024, LogPathA, "%S\\clutch.log", FullTargetDirectory);
-    InitLog(WidenChars(LogPathA));
-
-    Log("Target %S\n", FullTargetDirectory);
 
     char *TargetIncludeDirectoryA = PushSize(1024);
     FormatString(1024, TargetIncludeDirectoryA, "%S\\include", FullTargetDirectory);
@@ -128,8 +109,6 @@ main()
 
     // NOTE(chuck): Run build script and capture its stderr/stdout.  This is done for
     // debuggability if the build script fails.
-    etw_event_trace *ETWEventTrace;
-    {
         HANDLE ReadStdout;
         HANDLE WriteStdout;
         SECURITY_ATTRIBUTES SecurityAttributes = {};
@@ -179,7 +158,16 @@ main()
 
         Log("Build script %S %S\n", CmdExe, CmdArgs);
         Log("Windows directory %S\n", WindowsDirectory);
-        Log(VolumeListingBuffer);
+
+        win32_volume_list VolumeList = Win32GetVolumeList();
+        Log("Volumes (%d)\n", VolumeList.Count);
+        for(umm Index = 0;
+            Index < VolumeList.Count;
+            ++Index)
+        {
+            win32_volume *Volume = VolumeList.Volume + Index;
+            Log("    %S -> %S -> %S\n", Volume->GUID, Volume->DeviceName, Volume->Drive);
+        }
 
         process *Process = ProcessFilter + ProcessFilterCount++;
         Process->ImageFilename = PushArray(8, wchar_t);
@@ -190,10 +178,11 @@ main()
         CopyString(Process->CommandLine, CmdArgs);
 
         // NOTE(chuck): Start the trace only after we've setup the main process ID for filtering.
-        ETWEventTrace = ETWBeginTrace();
+        etw_event_trace *ETWEventTrace = ETWBeginTrace();
         ETWAddEventType(ETWEventTrace, ETWType_FileIO);
         ETWAddEventType(ETWEventTrace, ETWType_Process);
 
+        QueryPerformanceCounter(&BuildBeginCounter);
         ResumeThread(ProcessInfo.hThread);
         
         // NOTE(chuck): stdout must be closed before reading or we will hang.
@@ -267,7 +256,11 @@ main()
                  TotalBytesRead / 1024.0,
                  StdoutBuffer);
         }
-    }
+
+        QueryPerformanceCounter(&BuildEndCounter);
+        Log("Build took %.3fs\n", (BuildEndCounter.QuadPart - BuildBeginCounter.QuadPart) / (float)Frequency.QuadPart);
+
+    QueryPerformanceCounter(&EventProcessingBeginCounter);
 
     #define NEEDED_FILE_MAX (1024 * 10)
     needed_file *NeededFileList = PushArray(NEEDED_FILE_MAX, needed_file);
@@ -409,7 +402,7 @@ main()
                         Quit("Too many processes were spawned by your build script -- over %d.\n%s",
                              PROCESS_FILTER_MAX, CHANGE_REQUIRES_RECOMPILE);
                     }
-                    process *Process = ProcessFilter + ProcessFilterCount++;
+                    Process = ProcessFilter + ProcessFilterCount++;
                     Process->ImageFilename = Event->Process.ImageFilename;
                     Process->CommandLine = Event->Process.CommandLine;
                     Process->ProcessID = Event->ProcessID;
@@ -501,7 +494,10 @@ main()
         else if(StringEndsWith(NeededFile->Path, L".pdb")) ++TotalPDBFilesCopied;
         ++TotalFilesCopied;
     }
-    
+
+    QueryPerformanceCounter(&EventProcessingEndCounter);
+    Log("Event processing took %.3fs\n", (EventProcessingEndCounter.QuadPart - EventProcessingBeginCounter.QuadPart) / (float)Frequency.QuadPart);
+
     Log("\n");
     Log("%4d directories created\n", TotalDirectoriesCreated);
     Log("%4d .dll\n", TotalDLLFilesCopied);
@@ -515,6 +511,10 @@ main()
     // Printf("%d total files copied\n", TotalFilesCopied);
     Printf("Portable cl.exe generated in %S\n", FullTargetDirectory);
     // Printf("See %S for details.\n", LogPath.Data);
+
+    // TODO(chuck): End timing
+    QueryPerformanceCounter(&EndCounter);
+    Printf("Took %.3fs\n", (EndCounter.QuadPart - BeginCounter.QuadPart) / (float)Frequency.QuadPart);
 
     return(0);
 }

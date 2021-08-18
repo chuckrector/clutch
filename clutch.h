@@ -5,9 +5,11 @@
 #include <evntrace.h>
 #include <evntcons.h>
 #include <stdint.h>
+#include <stdio.h>
 
 #include "literals.h"
 #include "types.h"
+#include "memory.h"
 #include "strings.h"
 #include "files.h"
 #include "debug.h"

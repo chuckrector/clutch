@@ -60,7 +60,7 @@ static void GetFiles(wchar_t *Path, file_listing *FileListing);
 static b32 FileExists(wchar_t *Path);
 static wchar_t *GetFilename(wchar_t *Path);
 static int CreateDirectory(wchar_t *Path);
-static void DeleteFilesRecursively(wchar_t *Directory);
+static umm DeleteFilesRecursively(wchar_t *Directory);
 static int CreateDirectoriesRecursively(wchar_t *RootDirectory, wchar_t *RelativePath);
 static recursive_copy CopyFilesRecursively(wchar_t *FromFolder, wchar_t *ToFolder);
 static find_first_file FindFirstFileMatchInPathList(wchar_t *FileToFind, wchar_t *PathList);

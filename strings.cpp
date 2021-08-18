@@ -173,7 +173,21 @@ static char *
 UnwidenChars(wchar_t *String)
 {
     int Length = StringLength(String);
-    char *Result = PushArray(Length + 1, char);
+    /* TODO(chuck): Length*2 is twice as much room as needed, but I am getting
+       QueryDosDevice 998 errors (access violation) and I narrowed it down to this
+       function.  It doesn't seem to matter even if I let WideCharToMultiByte calculate
+       the size for me, such as with:
+
+          int RequiredSize = WideCharToMultiByte(CP_UTF8, 0, String, -1, 0, 0, 0, 0);
+
+       If I allocate a buffer of that size, which will include the null terminator,
+       I will still get the access violation errors.  The violation does not occur if
+       I allocate Length+2 rather than Length+1... but that doesn't make any sense?
+       
+       I dont't really care about the overallocation so much as it annoys me that I
+       don't understand why that problem occurs when it seems like I'm using
+       WideCharToMultiByte correctly. */
+    char *Result = PushArray(Length*2, char);
     WideCharToMultiByte(CP_UTF8, 0, String, Length, Result, Length, 0, 0);
     return(Result);
 }

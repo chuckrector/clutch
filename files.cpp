@@ -115,28 +115,26 @@ CreateDirectory(wchar_t *Path)
     return(CreationCount);
 }
 
-static void
+static umm
 DeleteFilesRecursively(wchar_t *Directory)
 {
     Assert(Directory);
 
-    /* TODO(chuck): If the target directory exists but is completely empty, attempting to
-       call Win32GetVolumeList will fail with a memory violation:
-    
-           Failed to query the DOS device: Volume{5faf6dd2-0000-0000-0000-100000000000}
-             Error code 998
-
-       Figure out where I'm mismanaging memory.  Until then, freeing all the memory used
-       here seems to fix the problem. */
-    umm Used = GlobalMemoryUsed;
+    umm FilesDeleted = 0;
 
     file_listing FileListing = {1024*10, 0, PushArray(1024*10, file)};
+
     GetFiles(Directory, &FileListing);
-    Log("%d existing files in %S are being deleted.\n", FileListing.Count, Directory);
+    if(FileListing.Count)
+    {
+        char *Plural = "";
+        if(FileListing.Count > 1) Plural = "s";
+        Log("%d existing file%s in %S are being deleted.\n", FileListing.Count, Plural, Directory);
+    }
     // Printf("Removing %d existing files in %S\n", FileListing.Count, Directory);
     for(int Index = 0;
         Index < FileListing.Count;
-        ++Index)
+        ++Index, ++FilesDeleted)
     {
         file* File = FileListing.List + Index;
         if(!File->IsDirectory)
@@ -152,7 +150,7 @@ DeleteFilesRecursively(wchar_t *Directory)
     // come last, so delete them in reverse order.
     for(int Index = FileListing.Count - 1;
         Index >= 0;
-        --Index)
+        --Index, FilesDeleted)
     {
         file *File = FileListing.List + Index;
         if(File->IsDirectory)
@@ -164,7 +162,7 @@ DeleteFilesRecursively(wchar_t *Directory)
         }
     }
 
-    GlobalMemoryUsed = Used;
+    return(FilesDeleted);
 }
 
 // NOTE(chuck): RootDirectory is expected to be an absolute path.

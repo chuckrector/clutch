@@ -3,6 +3,7 @@
 setlocal
 
 REM
+REM 4065 switch statement contains 'default' but no 'case' labels
 REM 4100 unreferenced formal parameter
 REM 4101 unreferenced local variable
 REM 4127 conditional expression is constant
@@ -14,7 +15,7 @@ REM 4702 unreachable code
 REM 4706 assignment within conditional expression
 REM 4996 deprecated/unsafe
 REM
-set CompilerFlags=/Gm- /GR- /GS- /Gs999999 /nologo /WX /W4 /wd4100 /wd4101 /wd4189 /wd4200 /wd4505 /wd4576 /wd4702 /wd4706 /wd4996 /FC /Od /Z7
+set CompilerFlags=/Gm- /GR- /GS- /Gs999999 /nologo /WX /W4 /wd4065 /wd4100 /wd4101 /wd4189 /wd4200 /wd4505 /wd4576 /wd4702 /wd4706 /wd4996 /FC /Od /Z7
 set LinkerFlags=/incremental:no /machine:x64 /manifest:no /opt:ref /subsystem:console
 
 REM https://superuser.com/questions/160702/get-current-folder-name-by-a-dos-command

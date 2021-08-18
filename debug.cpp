@@ -1,9 +1,9 @@
-#define Assert(Expression) if(!(Expression)) { *(int *)0 = 0; }
+#include "memory.h"
 
 static void
 Quit(char *Format, ...)
 {
-    char Buffer[4096];
+    char *Buffer = PushArray(4096, char);
     va_list Args;
     va_start(Args, Format);
     FormatStringList(4096, Buffer, Format, Args);
@@ -25,24 +25,32 @@ Quit(char *Format, ...)
     }
 }
 
+static b32 GlobalLogInitialized = false;
+
 static void
 InitLog(wchar_t *LogPath)
 {
     if(FileExists(LogPath)) DeleteFileW(LogPath);
     LogHandle = CreateFileW(LogPath, GENERIC_WRITE, 0, 0, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, 0);
+    GlobalLogInitialized = true;
 }
 
 static void
 Log(char *Format, ...)
 {
-    char Buffer[4096];
+    Assert(GlobalLogInitialized);
+
+    char *Buffer = PushArray(4096, char);
     va_list Args;
     va_start(Args, Format);
     umm BufferLength = FormatStringList(4096, Buffer, Format, Args);
     va_end(Args);
 
     DWORD BytesWritten;
-    WriteFile(LogHandle, Buffer, (DWORD)BufferLength, &BytesWritten, 0);
+    if(!WriteFile(LogHandle, Buffer, (DWORD)BufferLength, &BytesWritten, 0))
+    {
+        Quit("There was a problem writing to the log file.  %d bytes were written while %d were expected to be written.\n",
+             BytesWritten, BufferLength);
+    }
     FlushFileBuffers(LogHandle); // NOTE(chuck): To avoid having to close the log at the end of the program.
 }
-
