@@ -526,7 +526,6 @@ main()
     Log("%4d .pdb\n", TotalPDBFilesCopied);
     Log("%4d total files copied\n\n", TotalFilesCopied);
 
-    // TODO(chuck): End timing
     QueryPerformanceCounter(&EndCounter);
     Log("It took %.3fs for everything to complete.\n\n",
         (EndCounter.QuadPart - BeginCounter.QuadPart) / (float)Frequency.QuadPart);

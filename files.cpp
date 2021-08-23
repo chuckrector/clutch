@@ -501,18 +501,16 @@ Win32GetVolumeList()
         win32_volume *Volume = Result.Volume + Result.Count++;
         
         Volume->GUID = VolumeName;
-        Volume->DeviceName = PushArray(32, wchar_t);
+        Volume->DeviceName = PushArray(1024, wchar_t);
         Volume->Drive = PushArray(1024, wchar_t);
 
-        wchar_t *QueryName = PushArray(1024, wchar_t);
-        umm QueryNameLength = VolumeNameLength - 4 - 1;
-        MemCopy(QueryName, VolumeName + 4, QueryNameLength);
-        QueryName[QueryNameLength] = 0;
-        DWORD DeviceNameBytesWritten = QueryDosDeviceW(QueryName, Volume->DeviceName, 32);
+        VolumeName[VolumeNameLength - 1] = 0;
+        DWORD DeviceNameBytesWritten = QueryDosDeviceW(VolumeName + 4, Volume->DeviceName, 1024);
         if(!DeviceNameBytesWritten)
         {
-            Quit("There was a problem getting the MS-DOS device name for the following volume:\n    %S\n", QueryName);
+            Quit("There was a problem getting the MS-DOS device name for the following volume:\n    %S\n", VolumeName + 4);
         }
+        VolumeName[VolumeNameLength - 1] = '\\';
 
         DWORD ReturnLength;
         BOOL OK = GetVolumePathNamesForVolumeNameW(Volume->GUID, Volume->Drive, 1024, &ReturnLength);
