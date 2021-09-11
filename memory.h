@@ -16,8 +16,8 @@
 
 static char *PushSize(umm Size);
 
-static void MemCopy(char *To, char *From, umm Count);
-static void MemCopy(wchar_t *To, wchar_t *From, umm Count);
+static void MemCopyCC(char *To, char *From, umm Count);
+static void MemCopyWW(wchar_t *To, wchar_t *From, umm Count);
 static void MemClear(void *Bytes, umm Count);
 
 #define MEMORY_H

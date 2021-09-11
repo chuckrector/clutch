@@ -13,10 +13,10 @@ GetFiles(wchar_t *Path, file_listing *FileListing)
     Assert(Path[1] == ':'); // NOTE(chuck): Must be a full path
     // printf("GetDirectoryListing: %S\n", Path);
 
-    int PathLength = StringLength(Path);
+    int PathLength = StringLengthW(Path);
     wchar_t *SearchingInHere = PushArray(PathLength + 2 + 1, wchar_t);
-    CopyString(SearchingInHere, Path);
-    CopyString(SearchingInHere + PathLength, L"\\*");
+    CopyStringWW(SearchingInHere, Path);
+    CopyStringWW(SearchingInHere + PathLength, L"\\*");
 
     WIN32_FIND_DATAW FindData;
     HANDLE Handle = FindFirstFileW(SearchingInHere, &FindData);
@@ -25,8 +25,8 @@ GetFiles(wchar_t *Path, file_listing *FileListing)
         for(;;)
         {
             b32 IsIgnore =
-                StringsAreEqual(FindData.cFileName, L".") ||
-                StringsAreEqual(FindData.cFileName, L"..");
+                StringsAreEqualWW(FindData.cFileName, L".") ||
+                StringsAreEqualWW(FindData.cFileName, L"..");
             if(!IsIgnore)
             {
                 if(FileListing->Count >= FileListing->MaxCount)
@@ -35,12 +35,12 @@ GetFiles(wchar_t *Path, file_listing *FileListing)
                          CHANGE_REQUIRES_RECOMPILE);
                 }
                 file *File = FileListing->List + FileListing->Count++;
-                int FilePathLength = StringLength(FindData.cFileName);
+                int FilePathLength = StringLengthW(FindData.cFileName);
                 File->PathLength = FilePathLength;
                 File->Path = PushArray(PathLength + FilePathLength + 2, wchar_t); // NOTE(chuck): \ and \0
-                CopyString(File->Path, Path);
+                CopyStringWW(File->Path, Path);
                 File->Path[PathLength] = '\\';
-                CopyString(File->Path + PathLength + 1, FindData.cFileName);
+                CopyStringWW(File->Path + PathLength + 1, FindData.cFileName);
                 File->Size = FindData.nFileSizeLow | ((u64)FindData.nFileSizeHigh << 32);
                 File->IsDirectory = FindData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY;
 
@@ -94,7 +94,7 @@ FileExists(wchar_t *Path)
 static wchar_t *
 GetFilename(wchar_t *Path)
 {
-    wchar_t *Result = Path + StringLength(Path);
+    wchar_t *Result = Path + StringLengthW(Path);
     while(*Result != '\\') --Result;
     Assert(*Result == '\\');
     ++Result;
@@ -102,7 +102,7 @@ GetFilename(wchar_t *Path)
 }
 
 static int
-CreateDirectory(wchar_t *Path)
+CRR_CreateDirectory(wchar_t *Path)
 {
     int CreationCount = 0;
     b32 Result = CreateDirectoryW(Path, 0);
@@ -229,7 +229,7 @@ CreateDirectoriesRecursively(wchar_t *RootDirectory, wchar_t *RelativePath)
     
     if(*P == '\\')
     {
-        CreationCount += CreateDirectory(FullPath);
+        CreationCount += CRR_CreateDirectory(FullPath);
         wchar_t *NextRelativePath = P + 1;
         CreationCount += CreateDirectoriesRecursively(FullPath, NextRelativePath);
     }
@@ -243,9 +243,9 @@ static recursive_copy
 CopyFilesRecursively(wchar_t *FromDirectory, wchar_t *ToDirectory)
 {
     // printf("CopyFolderRecursively %s -> %s\n", FromDirectory, ToDirectory);
-    recursive_copy Result = {};
+    recursive_copy Result = {0};
 
-    b32 CreateDirectoryResult = CreateDirectory(ToDirectory);
+    b32 CreateDirectoryResult = CRR_CreateDirectory(ToDirectory);
     if(CreateDirectoryResult || GetLastError() == ERROR_ALREADY_EXISTS)
     {
         ++Result.DirectoriesCreated;
@@ -261,7 +261,7 @@ CopyFilesRecursively(wchar_t *FromDirectory, wchar_t *ToDirectory)
         if(FindHandle != INVALID_HANDLE_VALUE)
         {
             b32 NextResult;
-            b32 OK = true;
+            b32 OK = 1;
             do
             {
                 if(FindData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
@@ -366,7 +366,7 @@ GetFullPath(wchar_t *Path)
 static find_first_file
 FindFirstFileMatchInPathList(wchar_t *FileToFind, wchar_t *PathList)
 {
-    find_first_file Result = {};
+    find_first_file Result = {0};
 
     wchar_t *P = PathList;
     while(*P && !Result.PathLength)
@@ -408,13 +408,13 @@ Win32DevicePathToDrivePath(win32_volume_list *VolumeList, wchar_t *DevicePath)
     umm DeviceNameLength;
     wchar_t *VolumePath;
     {
-        wchar_t *P = DevicePath + StringLength(DevicePrefix);
+        wchar_t *P = DevicePath + StringLengthW(DevicePrefix);
         while(*P && *P != '\\') ++P;
         ++P;
         DeviceNameLength = (P - DevicePath);
         VolumePath = P; // NOTE(chuck): Points to foo
     }
-    umm DevicePathLength = StringLength(DevicePath);
+    umm DevicePathLength = StringLengthW(DevicePath);
     umm VolumePathLength = DevicePathLength - DeviceNameLength;
 
     wchar_t *Result = 0;
@@ -426,8 +426,8 @@ Win32DevicePathToDrivePath(win32_volume_list *VolumeList, wchar_t *DevicePath)
         if(StringStartsWith(DevicePath, Volume->DeviceName))
         {
             Result = PushArray(Volume->DriveLength + VolumePathLength + 1, wchar_t);
-            CopyString(Result, Volume->Drive);
-            CopyString(Result + Volume->DriveLength, VolumePath);
+            CopyStringWW(Result, Volume->Drive);
+            CopyStringWW(Result + Volume->DriveLength, VolumePath);
             break;
         }
     }
@@ -492,7 +492,7 @@ Win32GetVolumeList()
 
     do
     {
-        umm VolumeNameLength = StringLength(VolumeName);
+        umm VolumeNameLength = StringLengthW(VolumeName);
         if(Result.Count >= Result.MaxCount)
         {
             Quit("Too many volumes were found on your computer -- over %d.\n%s",
@@ -518,7 +518,7 @@ Win32GetVolumeList()
         {
             Quit("There was a probelm getting the drive mappings for the following volume:\n    %S\n", VolumeName);
         }
-        Volume->DriveLength = StringLength(Volume->Drive);
+        Volume->DriveLength = StringLengthW(Volume->Drive);
 
         VolumeName = PushArray(1024, wchar_t);
     } while(FindNextVolumeW(VolumeHandle, VolumeName, 1024));

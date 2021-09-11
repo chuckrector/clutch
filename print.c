@@ -12,7 +12,7 @@ PrintfList(DWORD Handle, char *Format, va_list Args)
 }
 
 static umm
-Printf(DWORD Handle, char *Format, ...)
+PrintfH(DWORD Handle, char *Format, ...)
 {
     va_list Args;
 

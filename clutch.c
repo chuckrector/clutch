@@ -24,7 +24,7 @@ main()
     QueryPerformanceCounter(&BeginCounter);
     InitBeginCounter = BeginCounter;
 
-    program_args ProgramArgs = GetProgramArgs();
+    program_args ProgramArgs = GetProgramArgsAuto();
     
     if(!((ProgramArgs.Count == 2) || (ProgramArgs.Count == 3)))
     {
@@ -64,7 +64,7 @@ main()
     Log("Target %S\n", FullTargetDirectory);
 
     wchar_t *FullBuildScript = GetFullPath(BuildScript);
-    smm FullBuildScriptLastSlashIndex = GetLastCharIndexInString(FullBuildScript, '\\');
+    smm FullBuildScriptLastSlashIndex = GetLastCharIndexInStringWW(FullBuildScript, '\\');
     if(FullBuildScriptLastSlashIndex == -1)
     {
         Quit("A trailing backslash in the full build script path couldn't be found.\n"
@@ -80,7 +80,7 @@ main()
     int TotalEXEFilesCopied = 0;
     int TotalDirectoriesCreated = 0;
 
-    TotalDirectoriesCreated += CreateDirectory(FullTargetDirectory);
+    TotalDirectoriesCreated += CRR_CreateDirectory(FullTargetDirectory);
     if(!TotalDirectoriesCreated) // NOTE(chuck): Already exists
     {
         LARGE_INTEGER BeginDeleteCounter;
@@ -113,8 +113,8 @@ main()
     FormatString(1024, TargetLibDirectoryA, "%S\\lib", FullTargetDirectory);
     wchar_t *TargetLibDirectory = WidenChars(TargetLibDirectoryA);
 
-    TotalDirectoriesCreated += CreateDirectory(TargetIncludeDirectory);
-    TotalDirectoriesCreated += CreateDirectory(TargetLibDirectory);
+    TotalDirectoriesCreated += CRR_CreateDirectory(TargetIncludeDirectory);
+    TotalDirectoriesCreated += CRR_CreateDirectory(TargetLibDirectory);
 
     #define PROCESS_FILTER_MAX (128)
     process *ProcessFilter = PushArray(PROCESS_FILTER_MAX, process);
@@ -124,7 +124,7 @@ main()
     // debuggability if the build script fails.
     HANDLE ReadStdout;
     HANDLE WriteStdout;
-    SECURITY_ATTRIBUTES SecurityAttributes = {};
+    SECURITY_ATTRIBUTES SecurityAttributes = {0};
     SecurityAttributes.nLength = sizeof(SecurityAttributes); 
     // NOTE(chuck): The child process won't be able to make use of these pipes unless
     // they have inheritance enabled.
@@ -136,8 +136,8 @@ main()
                 "It is needed in order to debug failures (if any.)\n");
     }
 
-    STARTUPINFOW StartupInfo = {};
-    PROCESS_INFORMATION ProcessInfo = {};
+    STARTUPINFOW StartupInfo = {0};
+    PROCESS_INFORMATION ProcessInfo = {0};
     StartupInfo.cb = sizeof(STARTUPINFOW); 
     StartupInfo.hStdError = WriteStdout;
     StartupInfo.hStdOutput = WriteStdout;
@@ -152,8 +152,8 @@ main()
     }
 
     wchar_t *CmdExe = PushArray(1024, wchar_t);
-    CopyString(CmdExe, WindowsDirectory);
-    CopyString(CmdExe + WindowsDirectoryLength, L"\\System32\\cmd.exe");
+    CopyStringWW(CmdExe, WindowsDirectory);
+    CopyStringWW(CmdExe + WindowsDirectoryLength, L"\\System32\\cmd.exe");
     char *CmdArgsA = PushSize(1024);
     FormatString(1024, CmdArgsA, "/c %S", FullBuildScript);
     wchar_t *CmdArgs = WidenChars(CmdArgsA);
@@ -184,11 +184,11 @@ main()
 
     process *Process = ProcessFilter + ProcessFilterCount++;
     Process->ImageFilename = PushArray(8, wchar_t);
-    Process->CommandLine = PushArray(StringLength(CmdArgs) + 1, wchar_t);
+    Process->CommandLine = PushArray(StringLengthW(CmdArgs) + 1, wchar_t);
     Process->ProcessID = ProcessInfo.dwProcessId;
     // Printf("  Root process PID %d\n", Process->ProcessID);
-    CopyString(Process->ImageFilename, L"cmd.exe");
-    CopyString(Process->CommandLine, CmdArgs);
+    CopyStringWW(Process->ImageFilename, L"cmd.exe");
+    CopyStringWW(Process->CommandLine, CmdArgs);
 
     // NOTE(chuck): Start the trace only after we've setup the main process ID for filtering.
     etw_event_trace *ETWEventTrace = ETWBeginTrace();
@@ -209,7 +209,7 @@ main()
     char *StdoutBufferP = StdoutBuffer;
     int BytesRemaining = StdoutBufferSize;
     int TotalBytesRead = 0;
-    b32 GotFullStdout = false;
+    b32 GotFullStdout = 0;
 
     for(;;)
     {
@@ -234,7 +234,7 @@ main()
         {
             if(TotalBytesRead && (GetLastError() == ERROR_BROKEN_PIPE))
             {
-                GotFullStdout = true;
+                GotFullStdout = 1;
             }
             break;
         }
@@ -301,14 +301,14 @@ main()
             {
                 // NOTE(chuck): Martins reminded me that cl.exe can launch many cl.exe child processes itself
                 // with /MP.  Need to track all spawned processes so that they can all be filtered against.
-                b32 Found = false;
+                b32 Found = 0;
                 for(int Index = 0;
                     Index < ProcessFilterCount;
                     ++Index)
                 {
                     if(Event->ProcessID == ProcessFilter[Index].ProcessID)
                     {
-                        Found = true;
+                        Found = 1;
                         break;
                     }
                 }
@@ -319,7 +319,7 @@ main()
                     wchar_t *Path = Win32DevicePathToDrivePath(&VolumeList, DevicePath);
                     // Log("Device path: %S\n  Drive path: %S\n", DevicePath, Path);
 
-                    int PathLength = StringLength(Path);
+                    int PathLength = StringLengthW(Path);
                     b32 IsTelemetry =
                         // TODO(chuck): Do any of these have legit uses for reasons other than Telemetry?
                         // I guess it's also true that if you're literally working on something relating to
@@ -346,14 +346,14 @@ main()
                     b32 IsWanted = (IsWhitelistedDirectory && IsWhitelistedExtension);
                     if(!IsIgnore && IsWanted && FileExists(Path))
                     {
-                        b32 IsFound = false;
+                        b32 IsFound = 0;
                         for(umm NeededFileIndex = 0;
                             NeededFileIndex < NeededFileCount;
                             ++NeededFileIndex)
                         {
                             if(StringsAreEqualWithinLength(NeededFileList[NeededFileIndex].Path, Path, PathLength + 1))
                             {
-                                IsFound = true;
+                                IsFound = 1;
                                 break;
                             }
                         }
@@ -369,7 +369,7 @@ main()
                             }
 
                             wchar_t *NewPathFilename = GetFilename(Path);
-                            int NewPathFilenameLength = StringLength(NewPathFilename);
+                            int NewPathFilenameLength = StringLengthW(NewPathFilename);
                             for(umm NeededFileIndex = 0;
                                 NeededFileIndex < NeededFileCount;
                                 ++NeededFileIndex)
@@ -391,7 +391,7 @@ main()
                             needed_file *NeededFile = NeededFileList + NeededFileCount++;
                             NeededFile->Path = PushArray(PathLength + 1, wchar_t);
                             NeededFile->ProcessID = Event->ProcessID;
-                            MemCopy(NeededFile->Path, Path, PathLength + 1);
+                            MemCopyWW(NeededFile->Path, Path, PathLength + 1);
                         }
                     }
                 }
@@ -400,14 +400,14 @@ main()
             case ETWType_Process:
             {
                 // Printf("[process] %s %S\n", Event->Process.ImageFilename, Event->Process.CommandLine);
-                b32 FoundChildProcess = false;
+                b32 FoundChildProcess = 0;
                 for(int Index = 0;
                     Index < ProcessFilterCount;
                     ++Index)
                 {
                     if(Event->Process.ParentProcessID == ProcessFilter[Index].ProcessID)
                     {
-                        FoundChildProcess = true;
+                        FoundChildProcess = 1;
                         break;
                     }
                }
@@ -436,7 +436,7 @@ main()
 
     // NOTE(chuck): Transform the filtered stuff into usable paths. Rack up some tallies
     // TODO(chuck): Merge with the filtering block above.
-    b32 IsFound = false;
+    b32 IsFound = 0;
     char *TargetPathBuffer = PushSize(1024);
     wchar_t *CompilerDirectory = 0;
     for(umm NeededFileIndex = 0;
@@ -460,13 +460,13 @@ main()
         {
             FormatString(1024, TargetPathBuffer, "%S\\%S", FullTargetDirectory, TargetFilename);
 
-            if(StringsAreEqual(TargetFilename, L"cl.exe"))
+            if(StringsAreEqualWW(TargetFilename, L"cl.exe"))
             {
                 if(!CompilerDirectory)
                 {
-                    int L = StringLength(TargetFilename) + 1;
+                    int L = StringLengthW(TargetFilename) + 1;
                     CompilerDirectory = GetFullPath(NeededFile->Path);
-                    smm Index = GetLastCharIndexInString(CompilerDirectory, '\\');
+                    smm Index = GetLastCharIndexInStringWW(CompilerDirectory, '\\');
                     if(Index == -1)
                     {
                         Quit("A trailing backslash in the full compiler path couldn't be found, which is very strange.\n"
@@ -483,7 +483,7 @@ main()
                 // NOTE(chuck): Preserve cl.exe subdirectories (e.g. 1033 for American English locale)
                 if(CompilerDirectory && StringStartsWith(NeededFile->Path, CompilerDirectory))
                 {
-                    wchar_t *RelativePath = NeededFile->Path + StringLength(CompilerDirectory);
+                    wchar_t *RelativePath = NeededFile->Path + StringLengthW(CompilerDirectory);
                     wchar_t *P = RelativePath;
                     while(*P && *P != '\\') ++P;
                     if(*P == '\\')

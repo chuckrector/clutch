@@ -1,9 +1,9 @@
 #include "memory.h"
 
-static b32 GlobalLogInitialized = false;
+static b32 GlobalLogInitialized = 0;
 static char *GlobalLogBuffer;
 static umm GlobalLogBufferPendingSize = 0;
-static b32 GlobalLogBufferPendingFlushed = false;
+static b32 GlobalLogBufferPendingFlushed = 0;
 
 static void
 Quit(char *Format, ...)
@@ -14,14 +14,14 @@ Quit(char *Format, ...)
     FormatStringList(4096, Buffer, Format, Args);
     va_end(Args);
 
-    Printf(STD_ERROR_HANDLE, Buffer);
+    PrintfH(STD_ERROR_HANDLE, Buffer);
 
     DWORD ErrorCode = GetLastError();
     if(ErrorCode)
     {
         char ErrorMessageBuffer[4096];
         DWORD BytesWritten = FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM, 0, ErrorCode, 0, ErrorMessageBuffer, 4096, 0);
-        Printf(STD_ERROR_HANDLE, "\nSystem error code %d: %s\n", ErrorCode, ErrorMessageBuffer);
+        PrintfH(STD_ERROR_HANDLE, "\nSystem error code %d: %s\n", ErrorCode, ErrorMessageBuffer);
         ExitProcess(ErrorCode);
     }
     else
@@ -36,7 +36,7 @@ InitLog(wchar_t *LogPath)
     // printf("InitLog %S\n", LogPath);
     if(FileExists(LogPath)) DeleteFileW(LogPath);
     LogHandle = CreateFileW(LogPath, GENERIC_WRITE, 0, 0, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, 0);
-    GlobalLogInitialized = true;
+    GlobalLogInitialized = 1;
 }
 
 // NOTE(chuck): Logging can occur before the log has been initialized.  It will buffer.  After
@@ -64,7 +64,7 @@ Log(char *Format, ...)
             }
         }
         GlobalLogBufferPendingSize = 0;
-        GlobalLogBufferPendingFlushed = true;
+        GlobalLogBufferPendingFlushed = 1;
     }
 
     va_list Args;

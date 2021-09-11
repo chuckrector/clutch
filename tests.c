@@ -53,12 +53,12 @@ d
 #include "strings.h"
 #include "files.h"
 
-#include "print.cpp"
-#include "debug.cpp"
-#include "memory.cpp"
-#include "strings.cpp"
-#include "program_args.cpp"
-#include "files.cpp"
+#include "print.c"
+#include "debug.c"
+#include "memory.c"
+#include "strings.c"
+#include "program_args.c"
+#include "files.c"
 
 int
 main()
@@ -114,9 +114,9 @@ main()
 
                             wchar_t *ExpectedArgW = WidenChars(ExpectedArg);
                             wchar_t *Arg = GetArg(&ProgramArgs, Index);
-                            if(!StringsAreEqual(ExpectedArgW, Arg))
+                            if(!StringsAreEqualWW(ExpectedArgW, Arg))
                             {
-                                Printf(STD_ERROR_HANDLE, "FAIL: Expected argument #%d to be `%S` but got `%S`\n", Index, ExpectedArgW, Arg);
+                                PrintfH(STD_ERROR_HANDLE, "FAIL: Expected argument #%d to be `%S` but got `%S`\n", Index, ExpectedArgW, Arg);
                                 Result = 1;
                             }
                         }
@@ -137,7 +137,7 @@ main()
         }
         else
         {
-            Printf(STD_ERROR_HANDLE, "Couldn't read file.  Error code %d\n", GetLastError());
+            PrintfH(STD_ERROR_HANDLE, "Couldn't read file.  Error code %d\n", GetLastError());
             Result = 1;
         }
 

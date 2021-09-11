@@ -22,6 +22,7 @@ struct Process_TypeGroup1
     // wchar_t PackageFullName[];
     // wchar_t ApplicationId[];    
 };
+typedef struct Process_TypeGroup1 Process_TypeGroup1;
 
 // structures from "C:\Program Files (x86)\Windows Kits\10\Include\10.0.19041.0\km\wmicore.mof" (in Windows DDK)
 struct FileIo_Create
@@ -34,6 +35,7 @@ struct FileIo_Create
     uint32_t ShareAccess;
     wchar_t OpenPath[];
 };
+typedef struct FileIo_Create FileIo_Create;
 
 struct process
 {
@@ -42,6 +44,7 @@ struct process
     wchar_t *ImageFilename;
     wchar_t *CommandLine;
 };
+typedef struct process process;
 
 enum etw_type
 {
@@ -52,12 +55,14 @@ enum etw_type
 
     ETWType_Count,
 };
+typedef enum etw_type etw_type;
 
 struct etw_event_file_io
 {
     wchar_t *Path;
     int PathLength;
 };
+typedef struct etw_event_file_io etw_event_file_io;
 
 struct etw_event_process
 {
@@ -67,6 +72,7 @@ struct etw_event_process
     wchar_t *CommandLine;
     int CommandLineLength;
 };
+typedef struct etw_event_process etw_event_process;
 
 struct etw_event
 {
@@ -78,12 +84,14 @@ struct etw_event
         etw_event_process Process;
     };
 };
+typedef struct etw_event etw_event;
 
 struct etw_internal_wnode
 {
     EVENT_TRACE_PROPERTIES Properties;
     WCHAR SessionName[1024];
 };
+typedef struct etw_internal_wnode etw_internal_wnode;
 
 struct etw_internal
 {
@@ -91,6 +99,7 @@ struct etw_internal
     TRACEHANDLE TraceHandle;
     HANDLE TraceThread;
 };
+typedef struct etw_internal etw_internal;
 
 #define ETW_EVENT_MAX (1024 * 10)
 struct etw_event_trace
@@ -102,6 +111,7 @@ struct etw_event_trace
     int Error;
     void *Internal;
 };
+typedef struct etw_event_trace etw_event_trace;
 
 // https://docs.microsoft.com/en-us/windows/win32/etw/nt-kernel-logger-constants
 // http://www.geoffchappell.com/studies/windows/km/ntoskrnl/api/etw/callouts/hookid.htm

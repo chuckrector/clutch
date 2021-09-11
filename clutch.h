@@ -15,16 +15,17 @@
 #include "debug.h"
 #include "event_tracing_for_windows.h"
 
-#include "print.cpp"
-#include "debug.cpp"
-#include "memory.cpp"
-#include "strings.cpp"
-#include "program_args.cpp"
-#include "files.cpp"
-#include "event_tracing_for_windows.cpp"
+#include "print.c"
+#include "debug.c"
+#include "memory.c"
+#include "strings.c"
+#include "program_args.c"
+#include "files.c"
+#include "event_tracing_for_windows.c"
 
 struct needed_file
 {
     wchar_t *Path;
     DWORD ProcessID;
 };
+typedef struct needed_file needed_file;

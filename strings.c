@@ -3,7 +3,7 @@
 // #define STD_ERROR_HANDLE  ((u32)-12)
 
 static int
-StringLength(char *String)
+StringLengthC(char *String)
 {
     int Result = 0;
     while(*String)
@@ -15,7 +15,7 @@ StringLength(char *String)
 }
 
 static int
-StringLength(wchar_t *String)
+StringLengthW(wchar_t *String)
 {
     int Result = 0;
     while(*String)
@@ -27,14 +27,14 @@ StringLength(wchar_t *String)
 }
 
 static void
-CopyString(char *To, char *From)
+CopyStringCC(char *To, char *From)
 {
     while(*From) *To++ = *From++;
     *To++ = 0;
 }
 
 static void
-CopyString(wchar_t *To, wchar_t *From)
+CopyStringWW(wchar_t *To, wchar_t *From)
 {
     while(*From) *To++ = *From++;
     *To++ = 0;
@@ -68,8 +68,8 @@ IsCharEqual(wchar_t A, wchar_t B)
 static b32
 StringEndsWith(wchar_t *String, wchar_t *Suffix)
 {
-    wchar_t *StringIter = String + StringLength(String);
-    wchar_t *SuffixIter = Suffix + StringLength(Suffix);
+    wchar_t *StringIter = String + StringLengthW(String);
+    wchar_t *SuffixIter = Suffix + StringLengthW(Suffix);
     while(SuffixIter > Suffix &&
           StringIter > String &&
           IsCharEqual(SuffixIter[-1], StringIter[-1]))
@@ -82,7 +82,7 @@ StringEndsWith(wchar_t *String, wchar_t *Suffix)
 }
 
 static b32
-StringsAreEqual(char *A, char *B)
+StringsAreEqualCC(char *A, char *B)
 {
     while(*A && *B && IsCharEqual(*A, *B))
     {
@@ -94,7 +94,7 @@ StringsAreEqual(char *A, char *B)
 }
 
 static b32
-StringsAreEqual(wchar_t *A, wchar_t *B)
+StringsAreEqualWW(wchar_t *A, wchar_t *B)
 {
     while(*A && *B && IsCharEqual(*A, *B))
     {
@@ -133,9 +133,9 @@ StringsAreEqualWithinLength(wchar_t *A, wchar_t *B, umm Size)
 static b32
 StringContains(wchar_t *String, wchar_t *Substring)
 {
-    int L = StringLength(String);
-    int SubstringLength = StringLength(Substring);
-    b32 Result = false;
+    int L = StringLengthW(String);
+    int SubstringLength = StringLengthW(Substring);
+    b32 Result = 0;
     if(SubstringLength <= L)
     {
         wchar_t *C = String;
@@ -144,7 +144,7 @@ StringContains(wchar_t *String, wchar_t *Substring)
         {
             if(StringsAreEqualWithinLength(C, Substring, SubstringLength))
             {
-                Result = true;
+                Result = 1;
                 break;
             }
             ++C;
@@ -163,7 +163,7 @@ IsEndComment(char *P)
 static wchar_t *
 WidenChars(char *String)
 {
-    int Length = StringLength(String);
+    int Length = StringLengthC(String);
     int LengthUTF16Z = MultiByteToWideChar(CP_UTF8, 0, String, -1, 0, 0);
     wchar_t *Result = PushArray(LengthUTF16Z, wchar_t);
     MultiByteToWideChar(CP_UTF8, 0, String, Length, Result, LengthUTF16Z);
@@ -173,7 +173,7 @@ WidenChars(char *String)
 static char *
 UnwidenChars(wchar_t *String)
 {
-    int Length = StringLength(String);
+    int Length = StringLengthW(String);
     int LengthUTF8Z = WideCharToMultiByte(CP_UTF8, 0, String, -1, 0, 0, 0, 0);
     char *Result = PushSize(LengthUTF8Z);
     WideCharToMultiByte(CP_UTF8, 0, String, Length, Result, LengthUTF8Z, 0, 0);
@@ -214,7 +214,7 @@ AppendDecimal(wide_buffer *Buffer, u32 Value)
 }
 
 static void
-AppendDouble(wide_buffer *Buffer, double Value, u32 Precision = 2)
+AppendDouble(wide_buffer *Buffer, double Value, u32 Precision)
 {
     if(Value < 0)
     {
@@ -402,23 +402,23 @@ FormatStringList(umm DestSize, char *DestInit, char *Format, va_list Args)
             {
                 ++At;
 
-                b32 ForceSign = false;
-                b32 PadWithZeros = false;
-                b32 LeftJustify = false;
-                b32 PositiveSignIsBlank = false;
-                b32 AnnotateIfNotZero = false;
+                b32 ForceSign = 0;
+                b32 PadWithZeros = 0;
+                b32 LeftJustify = 0;
+                b32 PositiveSignIsBlank = 0;
+                b32 AnnotateIfNotZero = 0;
 
-                b32 Parsing = true;
+                b32 Parsing = 1;
                 while(Parsing)
                 {
                     switch(*At)
                     {
-                        case '+': {ForceSign = true;} break;
-                        case '0': {PadWithZeros = true;} break;
-                        case '-': {LeftJustify = true;} break;
-                        case ' ': {PositiveSignIsBlank = true;} break;
-                        case '#': {AnnotateIfNotZero = true;} break;
-                        default: {Parsing = false;} break;
+                        case '+': {ForceSign = 1;} break;
+                        case '0': {PadWithZeros = 1;} break;
+                        case '-': {LeftJustify = 1;} break;
+                        case ' ': {PositiveSignIsBlank = 1;} break;
+                        case '#': {AnnotateIfNotZero = 1;} break;
+                        default: {Parsing = 0;} break;
                     }
 
                     if(Parsing)
@@ -427,23 +427,23 @@ FormatStringList(umm DestSize, char *DestInit, char *Format, va_list Args)
                     }
                 }
 
-                b32 WidthSpecified = false;
+                b32 WidthSpecified = 0;
                 s32 Width = 0;
                 if(*At == '*')
                 {
                     Width = va_arg(Args, int);
-                    WidthSpecified = true;
+                    WidthSpecified = 1;
                     ++At;
                 }
                 else if((*At >= '0') && (*At <= '9'))
                 {
                     Width = S32FromZInternal(&At);
-                    WidthSpecified = true;
+                    WidthSpecified = 1;
                     // ++At; // NOTE(chuck): S32FromZInternal increments At
                 }
 
                 // NOTE(chuck): Precision
-                b32 PrecisionSpecified = false;
+                b32 PrecisionSpecified = 0;
                 s32 Precision = 0;
                 if(*At == '.')
                 {
@@ -452,13 +452,13 @@ FormatStringList(umm DestSize, char *DestInit, char *Format, va_list Args)
                     if(*At == '*')
                     {
                         Precision = va_arg(Args, int);
-                        PrecisionSpecified = true;
+                        PrecisionSpecified = 1;
                         ++At;
                     }
                     else if((*At >= '0') && (*At <= '9'))
                     {
                         Precision = S32FromZInternal(&At);
-                        PrecisionSpecified = true;
+                        PrecisionSpecified = 1;
                         // ++At; // NOTE(chuck): S32FromZInternal increments At
                     }
                     else
@@ -511,7 +511,7 @@ FormatStringList(umm DestSize, char *DestInit, char *Format, va_list Args)
                 char *Temp = TempBuffer;
                 format_dest TempDest = {ArrayCount(TempBuffer), Temp};
                 char *Prefix = "";
-                b32 IsFloat = false;
+                b32 IsFloat = 0;
 
                 switch(*At)
                 {
@@ -588,7 +588,7 @@ FormatStringList(umm DestSize, char *DestInit, char *Format, va_list Args)
                     {
                         f64 Value = ReadVarArgFloat(FloatLength, &Args);
                         F64ToASCII(&TempDest, Value, Precision);
-                        IsFloat = true;
+                        IsFloat = 1;
                     } break;
                     
                     case 'c':
@@ -613,7 +613,7 @@ FormatStringList(umm DestSize, char *DestInit, char *Format, va_list Args)
                         }
                         else
                         {
-                            TempDest.Size = StringLength(String);
+                            TempDest.Size = StringLengthC(String);
                         }
 
                         Temp = String;
@@ -636,7 +636,7 @@ FormatStringList(umm DestSize, char *DestInit, char *Format, va_list Args)
                         }
                         else
                         {
-                            TempDest.Size = StringLength(String);
+                            TempDest.Size = StringLengthW(String);
                         }
 
                         Temp = UnwidenChars(String);
@@ -674,7 +674,7 @@ FormatStringList(umm DestSize, char *DestInit, char *Format, va_list Args)
                         UsePrecision = (TempDest.At - Temp);
                     }
 
-                    smm PrefixLength = StringLength(Prefix);
+                    smm PrefixLength = StringLengthC(Prefix);
                     smm UseWidth = Width;
                     smm ComputedWidth = UsePrecision + PrefixLength;
                     if(UseWidth < ComputedWidth)
@@ -685,7 +685,7 @@ FormatStringList(umm DestSize, char *DestInit, char *Format, va_list Args)
                     if(PadWithZeros)
                     {
                         Assert(!LeftJustify);
-                        LeftJustify = false;
+                        LeftJustify = 0;
                     }
 
                     if(!LeftJustify)
@@ -771,9 +771,9 @@ FormatString(umm DestSize, char *Dest, char *Format, ...)
 
 
 static smm
-GetLastCharIndexInString(char *String, char Char)
+GetLastCharIndexInStringCC(char *String, char Char)
 {
-    char *P = String + StringLength(String);
+    char *P = String + StringLengthC(String);
     while(P > String && *P != Char)
     {
         --P;
@@ -787,9 +787,9 @@ GetLastCharIndexInString(char *String, char Char)
 }
 
 static smm
-GetLastCharIndexInString(wchar_t *String, wchar_t Char)
+GetLastCharIndexInStringWW(wchar_t *String, wchar_t Char)
 {
-    wchar_t *P = String + StringLength(String);
+    wchar_t *P = String + StringLengthW(String);
     while(P > String && *P != Char)
     {
         --P;

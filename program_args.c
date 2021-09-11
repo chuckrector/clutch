@@ -4,12 +4,14 @@ struct arg
     wchar_t *Value;
     umm Length;
 };
+typedef struct arg arg;
 
 struct program_args
 {
     u32 Count;
     arg *ArgList;
 };
+typedef struct program_args program_args;
 
 static arg *
 AddProgramArg(program_args *ProgramArgs)
@@ -124,7 +126,7 @@ GetProgramArgs(wchar_t *CommandLine)
 }
  
 static program_args
-GetProgramArgs()
+GetProgramArgsAuto()
 {
     wchar_t *CommandLine = GetCommandLineW();
     program_args Result = GetProgramArgs(CommandLine);

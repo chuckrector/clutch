@@ -1,6 +1,6 @@
 #include "memory.h"
 
-static char GlobalMemory[MEMORY_LIMIT] = {};
+static char GlobalMemory[MEMORY_LIMIT] = {0};
 static umm GlobalMemoryUsed = 0;
 
 static char *
@@ -27,13 +27,13 @@ PushSize(umm Size)
 }
 
 static void
-MemCopy(char *To, char *From, umm Count)
+MemCopyCC(char *To, char *From, umm Count)
 {
     while(Count--) *To++ = *From++;
 }
 
 static void
-MemCopy(wchar_t *To, wchar_t *From, umm Count)
+MemCopyWW(wchar_t *To, wchar_t *From, umm Count)
 {
     while(Count--) *To++ = *From++;
 }

@@ -21,7 +21,7 @@ TraceEventRecordCallback(EVENT_RECORD *EventRecord)
     etw_event_trace *Trace = (etw_event_trace *)EventRecord->UserContext;
 
     if((Trace->Types & (1LL << ETWType_FileIO)) &&
-       IsEqualGUID(*Provider, FileIoGuid))
+       IsEqualGUID(Provider, &FileIoGuid)) // NOTE(chuck): Interesting how the signature changes for C!
     {
         if(OpCode == 0x40) // PERFINFO_LOG_TYPE_FILE_IO_CREATE
         {
@@ -30,7 +30,7 @@ TraceEventRecordCallback(EVENT_RECORD *EventRecord)
             FileIo_Create *Data = (FileIo_Create *)EventRecord->UserData;
 
             wchar_t *Path = Data->OpenPath;
-            int PathLength = StringLength(Path);
+            int PathLength = StringLengthW(Path);
 
             // Log("ETW (PID %d) %S\n", Event->EventHeader.ProcessId, Path);
 
@@ -38,11 +38,11 @@ TraceEventRecordCallback(EVENT_RECORD *EventRecord)
             ETWEvent->ProcessID = EventRecord->EventHeader.ProcessId;
             ETWEvent->FileIO.Path = PushArray(PathLength + 1, wchar_t);
             ETWEvent->FileIO.PathLength = PathLength;
-            MemCopy(ETWEvent->FileIO.Path, Path, PathLength + 1);
+            MemCopyWW(ETWEvent->FileIO.Path, Path, PathLength + 1);
         }
     }
     else if((Trace->Types & (1LL << ETWType_Process)) &&
-            IsEqualGUID(*Provider, ProcessGuid))
+            IsEqualGUID(Provider, &ProcessGuid)) // NOTE(chuck): Interesting how the signature changes for C!
     {
         if(OpCode == EVENT_TRACE_TYPE_START)
         {
@@ -53,9 +53,9 @@ TraceEventRecordCallback(EVENT_RECORD *EventRecord)
             DWORD SIDLength = GetLengthSid(&Data->UserSID);
 
             char *ImageFilename = (char *)&Data->UserSID + SIDLength;
-            int ImageFilenameLength = StringLength(ImageFilename);
+            int ImageFilenameLength = StringLengthC(ImageFilename);
             wchar_t *CommandLine = (wchar_t *)(ImageFilename + ImageFilenameLength + 1);
-            int CommandLineLength = StringLength(CommandLine);
+            int CommandLineLength = StringLengthW(CommandLine);
 
             ETWEvent->Type = ETWType_Process;
             ETWEvent->ProcessID = Data->ProcessId;
@@ -68,7 +68,7 @@ TraceEventRecordCallback(EVENT_RECORD *EventRecord)
             // NOTE(chuck): We only allocate here, so a copy is needed.
             ETWEvent->Process.CommandLine = PushArray(CommandLineLength + 1, wchar_t);
             ETWEvent->Process.CommandLineLength = CommandLineLength;
-            CopyString(ETWEvent->Process.CommandLine, CommandLine);
+            CopyStringWW(ETWEvent->Process.CommandLine, CommandLine);
         }
     }
 
@@ -163,7 +163,7 @@ ETWBeginTrace()
         Quit("Event Tracing for Windows could not begin because starting the trace failed.\n");
     }
 
-    EVENT_TRACE_LOGFILEW TraceLogFile = {};
+    EVENT_TRACE_LOGFILEW TraceLogFile = {0};
     TraceLogFile.LoggerName = KERNEL_LOGGER_NAMEW;
     TraceLogFile.ProcessTraceMode = PROCESS_TRACE_MODE_EVENT_RECORD|PROCESS_TRACE_MODE_RAW_TIMESTAMP|PROCESS_TRACE_MODE_REAL_TIME;
     TraceLogFile.EventRecordCallback = TraceEventRecordCallback;
